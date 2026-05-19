@@ -1,0 +1,10 @@
+Markdown report bundle: Matching, Retrieval Pipelines, and Reranking in Neural Search
+
+- 00_README.md
+- 01_matching_methods.md
+- 02_fusion_and_query_transforms.md
+- 03_retrieval_pipeline_patterns.md
+- 04_reranking_model_cards.md
+- 05_decision_playbooks.md
+- 06_implementation_and_evaluation.md
+- 07_references.md

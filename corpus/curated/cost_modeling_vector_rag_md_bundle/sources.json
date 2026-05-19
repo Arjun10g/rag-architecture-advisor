@@ -1,0 +1,338 @@
+[
+  {
+    "name": "Pinecone pricing",
+    "url": "https://www.pinecone.io/pricing/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Pricing page used for storage, read/write units, embedding and reranking examples; volatile."
+  },
+  {
+    "name": "Pinecone understand cost",
+    "url": "https://docs.pinecone.io/guides/manage-cost/understanding-cost",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Explains cost dimensions such as storage, read units, write units and backups."
+  },
+  {
+    "name": "AWS SageMaker AI pricing",
+    "url": "https://aws.amazon.com/sagemaker/ai/pricing/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Used for representative managed GPU hourly examples such as A10G-class instances."
+  },
+  {
+    "name": "AWS EC2 Capacity Blocks pricing",
+    "url": "https://aws.amazon.com/ec2/capacityblocks/pricing/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Used for A100/H100 effective hourly-rate examples."
+  },
+  {
+    "name": "AWS EC2 P4 instance page",
+    "url": "https://aws.amazon.com/ec2/instance-types/p4/",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Used for spot/instance context and high-end GPU economics."
+  },
+  {
+    "name": "Google Cloud DWS pricing",
+    "url": "https://cloud.google.com/products/dws/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Used for representative GCP accelerator price signal."
+  },
+  {
+    "name": "Google Cloud GPU pricing",
+    "url": "https://cloud.google.com/compute/gpus-pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "GPU pricing should be calculator-confirmed by region."
+  },
+  {
+    "name": "Azure VM Linux pricing",
+    "url": "https://azure.microsoft.com/en-us/pricing/details/virtual-machines/linux/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Official pricing path; exact GPU rates require calculator/region confirmation."
+  },
+  {
+    "name": "Azure AI Search pricing",
+    "url": "https://azure.microsoft.com/en-us/pricing/details/search/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Official pricing path for Azure AI Search tiers; volatile."
+  },
+  {
+    "name": "Cohere pricing",
+    "url": "https://cohere.com/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Used for hosted/dedicated embed and rerank pricing structures."
+  },
+  {
+    "name": "Voyage AI pricing",
+    "url": "https://docs.voyageai.com/docs/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Used for token-priced reranking/embedding cost structure."
+  },
+  {
+    "name": "OpenAI pricing",
+    "url": "https://openai.com/api/pricing/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Add/update directly before procurement; pricing is volatile."
+  },
+  {
+    "name": "Anthropic pricing",
+    "url": "https://www.anthropic.com/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Add/update directly before procurement; pricing is volatile."
+  },
+  {
+    "name": "Weaviate pricing",
+    "url": "https://weaviate.io/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Calculator-oriented pricing; dimensions/object counts influence cost."
+  },
+  {
+    "name": "Weaviate billing docs",
+    "url": "https://docs.weaviate.io/cloud/platform/billing",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Used for billing model context."
+  },
+  {
+    "name": "Milvus OSS",
+    "url": "https://milvus.io/",
+    "type": "OSS/product docs",
+    "accessed": "May 19, 2026",
+    "notes": "Milvus OSS has no license cost; infra/ops cost dominates."
+  },
+  {
+    "name": "Milvus GitHub",
+    "url": "https://github.com/milvus-io/milvus",
+    "type": "OSS repository",
+    "accessed": "May 19, 2026",
+    "notes": "OSS reference."
+  },
+  {
+    "name": "Zilliz pricing",
+    "url": "https://zilliz.com/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Managed Milvus/Zilliz pricing."
+  },
+  {
+    "name": "Zilliz understand cost",
+    "url": "https://docs.zilliz.com/docs/understand-cost",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Explains compute, storage, transfer, index build and related costs."
+  },
+  {
+    "name": "Zilliz storage cost",
+    "url": "https://docs.zilliz.com/docs/storage-cost",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Storage cost notes."
+  },
+  {
+    "name": "Qdrant pricing",
+    "url": "https://qdrant.tech/pricing/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Cloud resource/billing tiers."
+  },
+  {
+    "name": "Qdrant billing docs",
+    "url": "https://qdrant.tech/documentation/cloud-pricing-payments/",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Billing/payment details."
+  },
+  {
+    "name": "pgvector GitHub",
+    "url": "https://github.com/pgvector/pgvector",
+    "type": "OSS repository",
+    "accessed": "May 19, 2026",
+    "notes": "pgvector cost follows underlying Postgres infra."
+  },
+  {
+    "name": "AWS OpenSearch Service pricing",
+    "url": "https://aws.amazon.com/opensearch-service/pricing/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Instance/serverless/OCU pricing; volatile."
+  },
+  {
+    "name": "Elastic hosted pricing",
+    "url": "https://www.elastic.co/pricing/cloud-hosted",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Hosted pricing."
+  },
+  {
+    "name": "Elastic serverless pricing",
+    "url": "https://www.elastic.co/pricing/serverless-search",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Ingest/search/ML VCU, storage and egress dimensions."
+  },
+  {
+    "name": "Vespa Cloud price calculator",
+    "url": "https://cloud.vespa.ai/price-calculator",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Resource-based pricing: vCPU, memory, disk, GPU memory, hourly."
+  },
+  {
+    "name": "LanceDB Enterprise docs",
+    "url": "https://docs.lancedb.com/enterprise",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Enterprise/BYOC notes; public static pricing limited."
+  },
+  {
+    "name": "LanceDB GitHub",
+    "url": "https://github.com/lancedb/lancedb",
+    "type": "OSS repository",
+    "accessed": "May 19, 2026",
+    "notes": "OSS/self-host cost follows object storage and compute."
+  },
+  {
+    "name": "Chroma pricing",
+    "url": "https://www.trychroma.com/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Writes, storage, query scan volume, returned network pricing."
+  },
+  {
+    "name": "Chroma cloud pricing docs",
+    "url": "https://docs.trychroma.com/cloud/pricing",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Cloud pricing model."
+  },
+  {
+    "name": "Redis pricing",
+    "url": "https://redis.io/pricing/",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Cloud tiers/minimums; volatile."
+  },
+  {
+    "name": "Redis BYOC docs",
+    "url": "https://redis.io/docs/latest/operate/rc/subscriptions/bring-your-own-cloud/",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "BYOC billing/infrastructure split."
+  },
+  {
+    "name": "MongoDB pricing",
+    "url": "https://www.mongodb.com/pricing",
+    "type": "provider pricing",
+    "accessed": "May 19, 2026",
+    "notes": "Atlas cluster pricing entry point."
+  },
+  {
+    "name": "MongoDB Atlas Search Node billing",
+    "url": "https://www.mongodb.com/docs/atlas/billing/search-node/",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Search/vector-search node billing."
+  },
+  {
+    "name": "MongoDB billing breakdown optimization",
+    "url": "https://www.mongodb.com/docs/atlas/billing/billing-breakdown-optimization/",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Backups/data transfer/search node billing context."
+  },
+  {
+    "name": "Vertex AI Vector Search overview",
+    "url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/build/vector-search/overview",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Billing dimensions and vector-size notes; pricing calculator oriented."
+  },
+  {
+    "name": "Vertex AI Vector Search update/rebuild index",
+    "url": "https://docs.cloud.google.com/vertex-ai/docs/vector-search/update-rebuild-index",
+    "type": "provider docs",
+    "accessed": "May 19, 2026",
+    "notes": "Update/rebuild and compaction billing behavior."
+  },
+  {
+    "name": "ANN-Benchmarks",
+    "url": "https://ann-benchmarks.com/index.html",
+    "type": "benchmark",
+    "accessed": "May 19, 2026",
+    "notes": "Recall/latency benchmark; not a cost model."
+  },
+  {
+    "name": "ANN-Benchmarks paper",
+    "url": "https://dl.acm.org/doi/10.1016/j.is.2019.02.006",
+    "type": "academic paper",
+    "accessed": "May 19, 2026",
+    "notes": "Benchmark methodology for ANN algorithms."
+  },
+  {
+    "name": "DiskANN paper",
+    "url": "https://www.microsoft.com/en-us/research/publication/diskann-fast-accurate-billion-point-nearest-neighbor-search-on-a-single-node/",
+    "type": "academic/industry research",
+    "accessed": "May 19, 2026",
+    "notes": "SSD/RAM tradeoffs for billion-scale ANN."
+  },
+  {
+    "name": "Microsoft Project Akupara / DiskANN",
+    "url": "https://www.microsoft.com/en-us/research/project/project-akupara-approximate-nearest-neighbor-search-for-large-scale-semantic-search/",
+    "type": "research project",
+    "accessed": "May 19, 2026",
+    "notes": "DiskANN project context."
+  },
+  {
+    "name": "Google ScaNN blog",
+    "url": "https://research.google/blog/announcing-scann-efficient-vector-similarity-search/",
+    "type": "research blog",
+    "accessed": "May 19, 2026",
+    "notes": "Partition/reorder/vector compression serving tradeoffs."
+  },
+  {
+    "name": "Google SOAR for ScaNN",
+    "url": "https://research.google/blog/soar-new-algorithms-for-even-faster-vector-search-with-scann/",
+    "type": "research blog",
+    "accessed": "May 19, 2026",
+    "notes": "Controlled redundancy for faster vector search with ScaNN."
+  },
+  {
+    "name": "Faiss GPU paper",
+    "url": "https://arxiv.org/abs/1702.08734",
+    "type": "academic paper",
+    "accessed": "May 19, 2026",
+    "notes": "Billion-scale similarity search with GPUs."
+  },
+  {
+    "name": "Faiss 2024 library paper",
+    "url": "https://arxiv.org/pdf/2401.08281",
+    "type": "academic paper",
+    "accessed": "May 19, 2026",
+    "notes": "Faiss design, compression and non-exhaustive search overview."
+  },
+  {
+    "name": "NVIDIA reranking microservice cost/accuracy article",
+    "url": "https://developer.nvidia.com/blog/how-using-a-reranking-microservice-can-improve-accuracy-and-costs-of-information-retrieval/",
+    "type": "industry article",
+    "accessed": "May 19, 2026",
+    "notes": "Frames reranking as end-to-end accuracy and cost lever."
+  },
+  {
+    "name": "LLM Selection and Vector Database Tuning",
+    "url": "https://www.mdpi.com/2076-3417/15/20/10886",
+    "type": "academic article",
+    "accessed": "May 19, 2026",
+    "notes": "Joint optimization of RAG model and vector DB tuning."
+  }
+]

@@ -1,0 +1,2411 @@
+{
+  "version": "corpus_2026_05_19_v1",
+  "documents": [
+    {
+      "path": "corpus/README.md",
+      "title": "Corpus",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "general",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "general",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": false,
+      "notes": "Excluded duplicate combined report."
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_md/01_literature_review.md",
+      "title": "01 \u2014 Literature Review: Chunking & Parsing Methods for Document Processing and NLP",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "chunking-parsing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "chunking-parsing",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_md/02_strategy_catalog_parameters_failure_modes.md",
+      "title": "02 \u2014 Strategy Catalog: Parameters, Failure Modes, and Use Cases",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "chunking-parsing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "chunking-parsing",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_md/03_document_type_specific_parsing.md",
+      "title": "03 \u2014 Document-Type-Specific Parsing and Chunking",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "chunking-parsing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "chunking-parsing",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_md/04_selection_framework_and_decision_matrix.md",
+      "title": "04 \u2014 Selection Framework and Decision Matrix",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "chunking-parsing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "chunking-parsing",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_md/05_implementation_blueprints.md",
+      "title": "05 \u2014 Implementation Blueprints, Pseudocode, and Ablation Plans",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "chunking-parsing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "chunking-parsing",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_md/06_bibliography.md",
+      "title": "06 \u2014 Bibliography and Source Notes",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "chunking-parsing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "chunking-parsing",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_md/README.md",
+      "title": "Chunking & Parsing Methods for Document Processing and NLP",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "chunking-parsing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "chunking-parsing",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/01_executive_summary_and_scope.md",
+      "title": "01 \u2014 Executive Summary and Scope",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/02_evaluation_frameworks_metric_definitions.md",
+      "title": "02 \u2014 Evaluation Frameworks and Metric Definitions",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/03_benchmark_datasets.md",
+      "title": "03 \u2014 Benchmark Datasets",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/04_gold_set_construction_methodology.md",
+      "title": "04 \u2014 Gold-Set Construction Methodology",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/05_llm_as_judge_caveats.md",
+      "title": "05 \u2014 LLM-as-Judge Caveats",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/06_offline_vs_online_evaluation.md",
+      "title": "06 \u2014 Offline vs Online Evaluation",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/07_selection_framework_when_to_use_which.md",
+      "title": "07 \u2014 Selection Framework: When to Use Which",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/08_bibliography.md",
+      "title": "08 \u2014 Bibliography",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/README.md",
+      "title": "Chunking, Parsing, and RAG Evaluation Literature Review",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "rag-evaluation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "evaluation",
+        "rag-evaluation",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/00_README.md",
+      "title": "Cost Modeling for Vector Search and RAG Systems",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/01_executive_summary.md",
+      "title": "Executive Summary",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/02_cost_model_formulas.md",
+      "title": "Cost Model Formulas",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/03_api_vs_self_host_gpu_crossover.md",
+      "title": "API vs Self-Host GPU Crossover",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/04_gpu_capacity_purchase_modes.md",
+      "title": "GPU Capacity Purchase Modes",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/05_managed_vector_store_billing.md",
+      "title": "Managed Vector Store Billing Models",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/06_reranker_cost_modeling.md",
+      "title": "Reranker Cost Modeling",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/07_where_cost_concentrates.md",
+      "title": "Where Cost Actually Concentrates in Production RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/08_storage_dimension_replication.md",
+      "title": "Storage, Dimension, Replication, and Index Footprint",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/09_scenario_models.md",
+      "title": "Scenario Models and Sensitivity Analysis",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/10_vendor_pricing_snapshot.md",
+      "title": "Vendor Pricing Snapshot",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/11_studies_benchmarks_tco_sources.md",
+      "title": "Studies, Benchmarks, and TCO Sources",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/12_decision_playbooks.md",
+      "title": "Decision Playbooks",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/13_cost_calculator_template.md",
+      "title": "Cost Calculator Template",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "cost-modeling",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "cost-modeling",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/00_executive_summary.md",
+      "title": "00 \u2014 Executive Summary",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/01_iac_principles_to_terraform.md",
+      "title": "01 \u2014 Seven IaC Principles Mapped to Terraform Constructs",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle",
+        "terraform"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/02_terraform_constructs_and_repo_patterns.md",
+      "title": "02 \u2014 Terraform Constructs and Repository Patterns",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle",
+        "terraform"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/03_state_environments_drift_import.md",
+      "title": "03 \u2014 State, Environments, Drift, Import, and Refactoring",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/04_policy_as_code.md",
+      "title": "04 \u2014 Policy-as-Code for Terraform and ML/RAG Infrastructure",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/05_iac_for_ml_rag_stacks.md",
+      "title": "05 \u2014 IaC for ML and RAG Stacks",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/06_comparative_context.md",
+      "title": "06 \u2014 Comparative Context: Terraform vs Pulumi vs AWS CDK vs CloudFormation",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/07_ci_cd_for_infra_and_reindex.md",
+      "title": "07 \u2014 CI/CD for Infrastructure and RAG Reindex Pipelines",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/08_decision_matrices_and_advisor_playbooks.md",
+      "title": "08 \u2014 Decision Matrices and Advisor Playbooks",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/09_failure_modes_and_controls.md",
+      "title": "09 \u2014 Failure Modes and Controls",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/10_bibliography.md",
+      "title": "10 \u2014 Bibliography and Source Notes",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/iac_provisioning_ml_rag_md/README.md",
+      "title": "IaC / Provisioning for ML and RAG Systems \u2014 Markdown Bundle",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "iac-provisioning",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "iac-provisioning",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/matching_retrieval_reranking_cloud_mapping_md/00_README.md",
+      "title": "Matching, Retrieval Pipelines, Reranking, and Cloud Platform Mapping",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "matching-retrieval-cloud",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "matching-retrieval-cloud",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/matching_retrieval_reranking_cloud_mapping_md/01_matching.md",
+      "title": "Matching Methods in Neural Search",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "matching-retrieval-cloud",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "matching-retrieval-cloud",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/matching_retrieval_reranking_cloud_mapping_md/02_retrieval_pipelines.md",
+      "title": "Retrieval Pipelines",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "matching-retrieval-cloud",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "matching-retrieval-cloud",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/matching_retrieval_reranking_cloud_mapping_md/03_reranking.md",
+      "title": "Reranking in Neural Search",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "matching-retrieval-cloud",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "matching-retrieval-cloud",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/matching_retrieval_reranking_cloud_mapping_md/04_cloud_platform_mapping.md",
+      "title": "Cloud Platform Mapping for RAG, Neural Search, and Model Serving",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "matching-retrieval-cloud",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "matching-retrieval-cloud",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/matching_retrieval_reranking_cloud_mapping_md/05_decision_guide.md",
+      "title": "Decision Guide: When to Use Which",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "matching-retrieval-cloud",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "matching-retrieval-cloud",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/matching_retrieval_reranking_cloud_mapping_md/06_references.md",
+      "title": "References and Source Pointers",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "matching-retrieval-cloud",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "matching-retrieval-cloud",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/00_README.md",
+      "title": "Matching, Retrieval Pipelines, and Reranking in Neural Search",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/01_matching_methods.md",
+      "title": "01 \u2014 Matching Methods in Neural Search",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/02_fusion_and_query_transforms.md",
+      "title": "02 \u2014 Fusion Methods and Query Transforms",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/03_retrieval_pipeline_patterns.md",
+      "title": "03 \u2014 Retrieval Pipeline Patterns",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/04_reranking_model_cards.md",
+      "title": "04 \u2014 Reranking Model Cards and Selection Guide",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/05_decision_playbooks.md",
+      "title": "05 \u2014 Decision Playbooks: When to Use Which Retrieval Strategy",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/06_implementation_and_evaluation.md",
+      "title": "06 \u2014 Implementation and Evaluation Guide",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "evaluation",
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/07_references.md",
+      "title": "07 \u2014 References",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "neural-search-reranking",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "neural-search-reranking",
+        "rerank",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_context_grounding_compression_md_files/00_README.md",
+      "title": "RAG Design Choices for Context, Grounding, and Compression",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_context_grounding_compression_md_files/01_context_construction.md",
+      "title": "01 \u2014 Context Construction for RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_context_grounding_compression_md_files/02_grounding_citation_abstention.md",
+      "title": "02 \u2014 Grounding, Citation, and Abstention Prompt Patterns",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "abstention",
+        "citation",
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_context_grounding_compression_md_files/03_lost_in_middle_long_context_vs_retrieval.md",
+      "title": "03 \u2014 Lost-in-the-Middle and Long-Context-vs-Retrieval",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_context_grounding_compression_md_files/04_context_compression.md",
+      "title": "04 \u2014 Context Compression for RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_context_grounding_compression_md_files/05_generator_model_selection_for_rag.md",
+      "title": "05 \u2014 Generator Model Selection for RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_context_grounding_compression_md_files/06_implementation_playbook.md",
+      "title": "06 \u2014 Implementation Playbook: Context, Grounding, Compression",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/00_executive_summary.md",
+      "title": "00 \u2014 Executive Summary",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/01_context_construction_and_context_packing.md",
+      "title": "01 \u2014 Context Construction for RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/02_grounding_citation_abstention_patterns.md",
+      "title": "02 \u2014 Grounding, Citation, and Abstention Prompt Patterns",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "abstention",
+        "citation",
+        "context-grounding-compression",
+        "grounding",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/03_lost_in_the_middle_and_long_context_vs_retrieval.md",
+      "title": "03 \u2014 Lost-in-the-Middle and Long-Context-vs-Retrieval",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/04_context_compression_and_llmlingua.md",
+      "title": "04 \u2014 Context Compression for RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/05_generator_model_selection_for_rag.md",
+      "title": "05 \u2014 Generator Model Selection for RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/06_implementation_playbook.md",
+      "title": "06 \u2014 Implementation Playbook: Context, Grounding, Compression",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/07_references_and_source_map.md",
+      "title": "07 \u2014 References and Source Map",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_design_choices_report_02_md/README.md",
+      "title": "Report 02 \u2014 RAG Design Choices for Context, Grounding, Compression, and Generator Selection",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "context-grounding-compression",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "context-grounding-compression",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/01_end_to_end_rag_reference_architectures.md",
+      "title": "End-to-End Reference Architectures for RAG and File Search",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/02_openai_file_search_reference_architecture.md",
+      "title": "OpenAI File Search Reference Architecture",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/03_cloud_rag_reference_architectures.md",
+      "title": "Cloud RAG Reference Architectures: AWS, Azure, and Google Cloud",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/04_framework_production_rag_architectures.md",
+      "title": "Framework-Centric Production RAG Architectures",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/05_pattern_matching_decision_guide.md",
+      "title": "Pattern-Matching Decision Guide for RAG and File Search Architectures",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/06_latency_cost_case_studies.md",
+      "title": "Latency, Cost, and Case-Study Evidence for RAG Reference Architectures",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "cost",
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/07_source_appendix.md",
+      "title": "Source Appendix: End-to-End RAG and File Search Architectures",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_reference_architectures_md/README.md",
+      "title": "End-to-End Reference Architectures for RAG and File Search",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "reference-architectures",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "reference-architectures",
+        "research-bundle"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/00_executive_summary.md",
+      "title": "Executive Summary \u2014 Security & Governance for RAG Systems",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/01_encryption_kms_architectures.md",
+      "title": "Encryption, KMS, and Key Architecture for RAG",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/02_rbac_permission_aware_retrieval.md",
+      "title": "RBAC and Permission-Aware Retrieval",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "retrieval",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/03_pii_detection_redaction_and_log_hygiene.md",
+      "title": "PII Detection, Redaction, and Log Hygiene",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/04_audit_lineage_and_logging.md",
+      "title": "Audit, Lineage, and Logging",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/05_gdpr_erasure_in_ann_indexes.md",
+      "title": "GDPR Right-to-Erasure in ANN and HNSW Indexes",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/06_poisoned_retrieval_and_prompt_injection.md",
+      "title": "Poisoned Retrieval and Indirect Prompt Injection",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "retrieval",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/07_implementation_playbook.md",
+      "title": "Implementation Playbook",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/08_interview_question_checklist.md",
+      "title": "Interview Question Checklist \u2014 RAG Security & Governance",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/09_references_and_source_map.md",
+      "title": "References and Source Map",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/rag_security_governance_md/README.md",
+      "title": "RAG Security & Governance Markdown Bundle",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "security-governance",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "research-bundle",
+        "security",
+        "security-governance"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/00_README.md",
+      "title": "Ops and Freshness in Vector Stores",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/01_incremental_ingestion_cdc.md",
+      "title": "01 \u2014 Incremental Ingestion and CDC for Vector Stores",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/02_deletes_tombstones_compaction.md",
+      "title": "02 \u2014 Deletes, Tombstones, and Compaction",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/03_reembedding_model_upgrades.md",
+      "title": "03 \u2014 Re-embedding and Model Upgrades",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/04_blue_green_reindex_index_versioning.md",
+      "title": "04 \u2014 Blue-Green Reindexing and Index Versioning",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/05_multi_tenancy_patterns.md",
+      "title": "05 \u2014 Multi-Tenancy Patterns in Vector Stores",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/06_caching_and_invalidation.md",
+      "title": "06 \u2014 Caching and Invalidation for Vector Retrieval",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/07_vendor_ops_profiles.md",
+      "title": "07 \u2014 Vendor Operational Profiles for Ops and Freshness",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "volatile",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/08_studies_articles_sources.md",
+      "title": "08 \u2014 Studies, Articles, and Source Guide",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "primary",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/curated/vector_ops_freshness_md/09_checklists_runbooks.md",
+      "title": "09 \u2014 Production Checklists and Runbooks",
+      "namespace": "knowledge",
+      "content_kind": "research-bundle",
+      "domain": "vector-ops-freshness",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "freshness",
+        "research-bundle",
+        "vector-ops-freshness"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/00-implementation-overview.md",
+      "title": "00 \u2014 Implementation Overview",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/01-repo-structure.md",
+      "title": "01 \u2014 Repository Structure",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/02-agentic-workflow-spec.md",
+      "title": "02 \u2014 Agentic Workflow Spec",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/03-retrieval-corpus-spec.md",
+      "title": "03 \u2014 Retrieval & Corpus Spec",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec",
+        "retrieval"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/04-hf-spaces-deployment-spec.md",
+      "title": "04 \u2014 HF Spaces Deployment Spec",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/05-cloud-iac-advisor-spec.md",
+      "title": "05 \u2014 Cloud / IaC Advisor Output Spec",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "iac",
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/06-eval-ci-spec.md",
+      "title": "06 \u2014 Evaluation & CI Spec",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/07-build-roadmap.md",
+      "title": "07 \u2014 Build Roadmap",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/08-gold-set-creation-plan.md",
+      "title": "08 \u2014 Gold Set Creation Plan",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/report/implementation_guide/09-corpus-chunking-spec.md",
+      "title": "Corpus Chunking Spec \u2014 Ingesting the Markdown Research Bundles",
+      "namespace": "knowledge",
+      "content_kind": "implementation-spec",
+      "domain": "implementation",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "chunk",
+        "implementation",
+        "implementation-spec"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/routing/router_domains/00-routing-attribute-taxonomy.md",
+      "title": "Routing Attribute Taxonomy",
+      "namespace": "routing",
+      "content_kind": "routing-card",
+      "domain": "routing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "router",
+        "routing",
+        "routing-card"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/routing/router_domains/01-router-decision-logic.md",
+      "title": "Router Decision Logic",
+      "namespace": "routing",
+      "content_kind": "routing-card",
+      "domain": "routing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "router",
+        "routing",
+        "routing-card"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/routing/router_domains/domain-financial-banking.md",
+      "title": "Domain Profile \u2014 Financial / Banking",
+      "namespace": "routing",
+      "content_kind": "routing-card",
+      "domain": "routing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "router",
+        "routing",
+        "routing-card"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/routing/router_domains/domain-medical-clinical.md",
+      "title": "Domain Profile \u2014 Medical / Clinical",
+      "namespace": "routing",
+      "content_kind": "routing-card",
+      "domain": "routing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "router",
+        "routing",
+        "routing-card"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/routing/router_domains/domain-profile-template.md",
+      "title": "Domain Profile \u2014 TEMPLATE",
+      "namespace": "routing",
+      "content_kind": "routing-card",
+      "domain": "routing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "router",
+        "routing",
+        "routing-card"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/routing/router_domains/domain-psychology-mental-health.md",
+      "title": "Domain Profile \u2014 Psychology / Mental Health",
+      "namespace": "routing",
+      "content_kind": "routing-card",
+      "domain": "routing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "router",
+        "routing",
+        "routing-card"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    },
+    {
+      "path": "corpus/routing/router_domains/domain-technical-software.md",
+      "title": "Domain Profile \u2014 Technical / Software Engineering",
+      "namespace": "routing",
+      "content_kind": "routing-card",
+      "domain": "routing",
+      "license": "project-curated-open-research-notes",
+      "trust_tier": "reputable",
+      "volatility": "stable",
+      "contested": "consensus",
+      "section_tags": [
+        "router",
+        "routing",
+        "routing-card"
+      ],
+      "source_url": null,
+      "date": "2026-05-19",
+      "ingest": true,
+      "notes": ""
+    }
+  ]
+}
