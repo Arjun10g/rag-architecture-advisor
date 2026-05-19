@@ -48,6 +48,19 @@ and model access are available:
 python3 scripts/embedding_dim_ablation.py --gold eval/gold/v0_2_expanded.json --dimensions 1024,768,512,384,256
 ```
 
+Compare lexical, dense, hybrid, and ColBERT-reranked strategies across both gold
+sets with:
+
+```bash
+python3 scripts/retrieval_strategy_ablation.py --gold eval/gold/v0_1_seed.json,eval/gold/v0_2_expanded.json
+```
+
+The ColBERT strategies require the optional VM/local install:
+
+```bash
+python3 -m pip install "rerankers[transformers]"
+```
+
 When dependencies are installed:
 
 ```bash

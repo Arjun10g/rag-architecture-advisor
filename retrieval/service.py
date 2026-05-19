@@ -8,6 +8,7 @@ from ingestion.build_index import build_index
 from retrieval.chunking import Chunk
 from retrieval.embeddings import DenseVectorIndex, EmbeddingConfig, EmbeddingUnavailable
 from retrieval.index import HybridRetriever, SearchResult, reciprocal_rank_fusion
+from retrieval.rerank import ColbertReranker, RerankerUnavailable
 
 
 try:
@@ -94,6 +95,41 @@ class DenseHybridRetriever:
         ]
 
 
+class RerankRetriever:
+    def __init__(
+        self,
+        base: Retriever,
+        reranker: ColbertReranker,
+        *,
+        candidate_top_k: int = 50,
+        allow_fallback: bool = True,
+    ):
+        self.base = base
+        self.reranker = reranker
+        self.candidate_top_k = candidate_top_k
+        self.allow_fallback = allow_fallback
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[SearchResult]:
+        candidates = self.base.search(
+            query,
+            top_k=max(top_k, self.candidate_top_k),
+            namespace=namespace,
+            filters=filters,
+        )
+        try:
+            return self.reranker.rerank(query, candidates, top_k=top_k)
+        except RerankerUnavailable:
+            if self.allow_fallback:
+                return candidates[:top_k]
+            raise
+
+
 def build_retriever(
     chunks: list[Chunk],
     *,
@@ -104,35 +140,53 @@ def build_retriever(
     allow_fallback: bool = True,
 ) -> Retriever:
     mode = mode.lower().strip()
+    use_colbert = mode.endswith("_colbert") or mode == "colbert"
+    base_mode = "lexical" if mode == "colbert" else mode.removesuffix("_colbert")
     lexical = HybridRetriever(chunks)
-    if mode == "lexical":
-        return lexical
+    if base_mode == "lexical":
+        retriever: Retriever = lexical
+    elif base_mode in {"dense", "hybrid"}:
+        try:
+            dense = DenseVectorIndex.from_chunks(
+                chunks,
+                config=embedding_config,
+                dimension=embedding_dimension,
+                rebuild=rebuild_embeddings,
+            )
+        except EmbeddingUnavailable:
+            if allow_fallback:
+                retriever = lexical
+                dense = None
+            else:
+                raise
 
-    try:
-        dense = DenseVectorIndex.from_chunks(
-            chunks,
-            config=embedding_config,
-            dimension=embedding_dimension,
-            rebuild=rebuild_embeddings,
+        if dense is None:
+            pass
+        elif base_mode == "dense":
+            retriever = DenseOnlyRetriever(dense)
+        elif base_mode == "hybrid":
+            retriever = DenseHybridRetriever(
+                lexical,
+                dense,
+                lexical_top_k=_env_int("LEXICAL_TOP_K", 100),
+                dense_top_k=_env_int("DENSE_TOP_K", 100),
+                rrf_k=_env_int("FUSION_RRF_K", 60),
+                lexical_weight=_env_float("LEXICAL_WEIGHT", 1.0),
+                dense_weight=_env_float("DENSE_WEIGHT", 1.0),
+            )
+    else:
+        raise ValueError(
+            f"Unknown RETRIEVAL_MODE {mode!r}; expected lexical, dense, hybrid, or *_colbert."
         )
-    except EmbeddingUnavailable:
-        if allow_fallback:
-            return lexical
-        raise
 
-    if mode == "dense":
-        return DenseOnlyRetriever(dense)
-    if mode == "hybrid":
-        return DenseHybridRetriever(
-            lexical,
-            dense,
-            lexical_top_k=_env_int("LEXICAL_TOP_K", 100),
-            dense_top_k=_env_int("DENSE_TOP_K", 100),
-            rrf_k=_env_int("FUSION_RRF_K", 60),
-            lexical_weight=_env_float("LEXICAL_WEIGHT", 1.0),
-            dense_weight=_env_float("DENSE_WEIGHT", 1.0),
+    if use_colbert:
+        return RerankRetriever(
+            retriever,
+            ColbertReranker.from_env(),
+            candidate_top_k=_env_int("COLBERT_CANDIDATE_TOP_K", 50),
+            allow_fallback=allow_fallback,
         )
-    raise ValueError(f"Unknown RETRIEVAL_MODE {mode!r}; expected lexical, dense, or hybrid.")
+    return retriever
 
 
 @lru_cache(maxsize=1)

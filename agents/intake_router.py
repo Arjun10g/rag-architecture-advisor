@@ -63,17 +63,65 @@ DOMAIN_PRIORS = {
 }
 
 
+DOMAIN_KEYWORDS = {
+    "medical-clinical": {
+        "clinical": 3,
+        "medical": 3,
+        "patient": 3,
+        "hipaa": 3,
+        "hospital": 2,
+        "medication": 2,
+        "ehr": 2,
+        "care pathway": 2,
+        "chart": 1,
+    },
+    "financial-banking": {
+        "bank": 3,
+        "financial": 3,
+        "pci": 3,
+        "transaction": 3,
+        "aml": 2,
+        "kyc": 2,
+        "loan": 2,
+        "credit": 2,
+        "card": 2,
+        "chargeback": 2,
+        "fraud": 1,
+    },
+    "technical-software": {
+        "api": 3,
+        "sdk": 3,
+        "code": 3,
+        "developer": 3,
+        "runbook": 3,
+        "kubernetes": 2,
+        "incident": 2,
+        "changelog": 2,
+        "release note": 2,
+        "docs": 1,
+    },
+    "psychology-mental-health": {
+        "psychology": 3,
+        "therapy": 3,
+        "therapeutic": 3,
+        "mental health": 3,
+        "cbt": 2,
+        "behavioral": 2,
+        "therapist": 2,
+        "counselor": 2,
+        "wellbeing": 1,
+    },
+}
+
+
 def detect_domain(user_brief: str) -> str | None:
     text = user_brief.lower()
-    if any(word in text for word in ("clinical", "medical", "patient", "hipaa")):
-        return "medical-clinical"
-    if any(word in text for word in ("bank", "financial", "pci", "transaction")):
-        return "financial-banking"
-    if any(word in text for word in ("api", "sdk", "code", "developer", "runbook")):
-        return "technical-software"
-    if any(word in text for word in ("psychology", "therapy", "therapeutic", "mental health")):
-        return "psychology-mental-health"
-    return None
+    scores = {
+        domain: sum(weight for keyword, weight in keywords.items() if keyword in text)
+        for domain, keywords in DOMAIN_KEYWORDS.items()
+    }
+    domain, score = max(scores.items(), key=lambda item: item[1])
+    return domain if score > 0 else None
 
 
 def resolve_requirements(state: AdvisorState) -> AdvisorState:
@@ -114,4 +162,3 @@ def resolve_requirements(state: AdvisorState) -> AdvisorState:
         )
 
     return state
-

@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import time
 from typing import Any, Callable
 
 if __package__ in {None, ""}:
@@ -40,6 +41,25 @@ class EvalReport:
 
 def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    rank = max(0, math.ceil((percentile / 100.0) * len(ordered)) - 1)
+    return ordered[min(rank, len(ordered) - 1)]
+
+
+def _latency_metrics(prefix: str, values: list[float]) -> dict[str, float]:
+    return {
+        f"{prefix}_latency_ms_mean": _mean(values),
+        f"{prefix}_latency_ms_p50": _percentile(values, 50),
+        f"{prefix}_latency_ms_p90": _percentile(values, 90),
+        f"{prefix}_latency_ms_p95": _percentile(values, 95),
+        f"{prefix}_latency_ms_p99": _percentile(values, 99),
+        f"{prefix}_latency_ms_max": max(values) if values else 0.0,
+    }
 
 
 def _load_gold(path: str | Path = DEFAULT_GOLD_PATH) -> dict[str, Any]:
@@ -128,12 +148,14 @@ def _score_retrieval_item(
     retrieve_fn: RetrieveFn,
 ) -> tuple[dict[str, float], dict[str, Any] | None]:
     top_k = int(item.get("top_k", 10))
+    started = time.perf_counter()
     results = retrieve_fn(
         item["query"],
         namespace=item.get("namespace", "knowledge"),
         top_k=top_k,
         filters=item.get("filters"),
     )
+    latency_ms = (time.perf_counter() - started) * 1000.0
     required = item.get("required", [])
     required_ranks = [_rank_of_first_match(results, evidence) for evidence in required]
     hits = [rank for rank in required_ranks if rank is not None]
@@ -157,7 +179,7 @@ def _score_retrieval_item(
             "top_sources": [_source_path(result) for result in results[:5]],
         }
 
-    return {"recall": recall, "mrr": mrr, "ndcg": ndcg}, failure
+    return {"recall": recall, "mrr": mrr, "ndcg": ndcg, "latency_ms": latency_ms}, failure
 
 
 def _score_retrieval(
@@ -172,20 +194,21 @@ def _score_retrieval(
         if failure:
             failures.append(failure)
 
-    return (
-        {
-            "retrieval_recall_at_10": _mean([score["recall"] for score in scores]),
-            "retrieval_mrr_at_10": _mean([score["mrr"] for score in scores]),
-            "retrieval_ndcg_at_10": _mean([score["ndcg"] for score in scores]),
-        },
-        failures,
-    )
+    metrics = {
+        "retrieval_recall_at_10": _mean([score["recall"] for score in scores]),
+        "retrieval_mrr_at_10": _mean([score["mrr"] for score in scores]),
+        "retrieval_ndcg_at_10": _mean([score["ndcg"] for score in scores]),
+        **_latency_metrics("retrieval", [score["latency_ms"] for score in scores]),
+    }
+    return metrics, failures
 
 
 def _score_routing_item(
     item: dict[str, Any],
 ) -> tuple[dict[str, float], dict[str, int], dict[str, Any] | None]:
+    started = time.perf_counter()
     state = resolve_requirements(AdvisorState(user_brief=item["scenario"]))
+    latency_ms = (time.perf_counter() - started) * 1000.0
     domain_correct = state.domain_prior == item.get("expected_domain")
 
     expected_attributes = item.get("expected_attributes") or {}
@@ -222,6 +245,7 @@ def _score_routing_item(
             "domain_accuracy": float(domain_correct),
             "attribute_accuracy": attr_correct / attr_total if attr_total else 1.0,
             "pending_accuracy": pending_correct / pending_total if pending_total else 1.0,
+            "latency_ms": latency_ms,
         },
         {
             "routing_attribute_total": attr_total,
@@ -264,6 +288,7 @@ def _score_routing(
             if counts["routing_pending_total"]
             else 1.0
         ),
+        **_latency_metrics("routing", [score["latency_ms"] for score in scores]),
     }
     return metrics, counts, failures
 
@@ -275,8 +300,10 @@ def _gold_requirement_vector(values: dict[str, str | None]) -> dict[str, Require
     return vector
 
 
-def _score_topology_item(item: dict[str, Any]) -> tuple[float, dict[str, Any] | None]:
+def _score_topology_item(item: dict[str, Any]) -> tuple[float, float, dict[str, Any] | None]:
+    started = time.perf_counter()
     selected = select_topology(_gold_requirement_vector(item["requirement_vector"]))
+    latency_ms = (time.perf_counter() - started) * 1000.0
     expected = item["expected_topology"]
     correct = selected["key"] == expected
     failure = None
@@ -287,19 +314,25 @@ def _score_topology_item(item: dict[str, Any]) -> tuple[float, dict[str, Any] | 
             "expected_topology": expected,
             "actual_topology": selected["key"],
         }
-    return float(correct), failure
+    return float(correct), latency_ms, failure
 
 
 def _score_topology(items: list[dict[str, Any]]) -> tuple[dict[str, float], list[dict[str, Any]]]:
     scores = []
+    latencies = []
     failures = []
     for item in items:
-        score, failure = _score_topology_item(item)
+        score, latency_ms, failure = _score_topology_item(item)
         scores.append(score)
+        latencies.append(latency_ms)
         if failure:
             failures.append(failure)
     accuracy = _mean(scores)
-    return {"topology_accuracy": accuracy, "topology_correctness": accuracy}, failures
+    return {
+        "topology_accuracy": accuracy,
+        "topology_correctness": accuracy,
+        **_latency_metrics("topology", latencies),
+    }, failures
 
 
 def run_eval(

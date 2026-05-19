@@ -16,6 +16,7 @@ from retrieval.index import SearchResult
 DEFAULT_EMBEDDING_MODEL = "mixedbread-ai/mxbai-embed-large-v1"
 DEFAULT_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 DEFAULT_DIMENSIONS = (1024, 768, 512, 384, 256)
+_MODEL_CACHE: dict[str, Any] = {}
 
 
 class EmbeddingUnavailable(RuntimeError):
@@ -75,6 +76,9 @@ class SentenceTransformerEmbedder:
     def _load_model(self) -> Any:
         if self._model is not None:
             return self._model
+        if self.config.model_name in _MODEL_CACHE:
+            self._model = _MODEL_CACHE[self.config.model_name]
+            return self._model
 
         try:
             from sentence_transformers import SentenceTransformer
@@ -91,6 +95,7 @@ class SentenceTransformerEmbedder:
             raise EmbeddingUnavailable(
                 f"Could not load embedding model {self.config.model_name}: {exc}"
             ) from exc
+        _MODEL_CACHE[self.config.model_name] = self._model
         return self._model
 
 
@@ -210,9 +215,29 @@ def _load_or_build_vectors(
             if isinstance(vectors, list) and len(vectors) == len(chunks):
                 return vectors
 
+    if dimension != config.native_dimension and not rebuild:
+        native_vectors = _load_native_vectors(chunks, config)
+        if native_vectors:
+            vectors = [_normalize(vector[:dimension]) for vector in native_vectors]
+            _write_cache(cache_path, {"cache_key": key, "vectors": vectors})
+            return vectors
+
     texts = [chunk.text_for_embedding for chunk in chunks]
     vectors = embedder.encode(texts, is_query=False, dimension=dimension)
     _write_cache(cache_path, {"cache_key": key, "vectors": vectors})
+    return vectors
+
+
+def _load_native_vectors(chunks: list[Chunk], config: EmbeddingConfig) -> list[list[float]] | None:
+    native_path = _cache_path(config, config.native_dimension)
+    if not native_path.exists():
+        return None
+    cached = _read_cache(native_path)
+    if cached.get("cache_key") != _cache_key(chunks, config, config.native_dimension):
+        return None
+    vectors = cached.get("vectors")
+    if not isinstance(vectors, list) or len(vectors) != len(chunks):
+        return None
     return vectors
 
 

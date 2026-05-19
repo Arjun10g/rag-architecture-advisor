@@ -1,0 +1,178 @@
+{
+  "version": "gold_v0_3_routing_stress",
+  "created": "2026-05-19",
+  "description": "Routing-only stress set focused on domain-prior detection, domain-specific synonyms, mixed-domain wording, and unknown-domain elicitation.",
+  "thresholds": {
+    "routing_domain_accuracy": 0.9,
+    "routing_attribute_accuracy": 0.9,
+    "routing_pending_accuracy": 1.0
+  },
+  "retrieval": [],
+  "routing": [
+    {
+      "id": "route_ehr_medication_review",
+      "scenario": "A hospital quality team needs RAG over EHR notes, medication review guidance, and patient safety care pathways.",
+      "expected_domain": "medical-clinical",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "high",
+        "A5": "regulated-personal",
+        "A10": "far-jargon",
+        "A11": "mandatory",
+        "A12": "gated"
+      }
+    },
+    {
+      "id": "route_clinical_api_still_medical",
+      "scenario": "Clinical informatics wants an API assistant for EHR integration docs and patient chart workflows.",
+      "expected_domain": "medical-clinical",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "high",
+        "A4": "sectoral",
+        "A5": "regulated-personal"
+      }
+    },
+    {
+      "id": "route_aml_kyc_policy",
+      "scenario": "Compliance analysts need a banking assistant over AML investigations, KYC procedures, fraud notes, and loan policy manuals.",
+      "expected_domain": "financial-banking",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "high",
+        "A4": "sectoral",
+        "A5": "regulated-personal",
+        "A10": "moderate-jargon"
+      }
+    },
+    {
+      "id": "route_chargeback_card_controls",
+      "scenario": "Card operations wants answers over chargeback runbooks, PCI controls, transaction logs, and credit-card dispute procedures.",
+      "expected_domain": "financial-banking",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "high",
+        "A5": "regulated-personal",
+        "A11": "mandatory"
+      }
+    },
+    {
+      "id": "route_kubernetes_incident_docs",
+      "scenario": "A platform engineering group needs retrieval over Kubernetes incident runbooks, changelogs, API docs, and release notes.",
+      "expected_domain": "technical-software",
+      "expected_attributes": {
+        "A1": "costly",
+        "A2": "high",
+        "A6": "code + markdown + mixed",
+        "A7": "fast-moving",
+        "A12": "none/advisory"
+      }
+    },
+    {
+      "id": "route_sdk_code_examples",
+      "scenario": "Developer experience needs a code-aware assistant for SDK examples, generated API references, and integration troubleshooting.",
+      "expected_domain": "technical-software",
+      "expected_attributes": {
+        "A1": "costly",
+        "A2": "high",
+        "A6": "code + markdown + mixed",
+        "A10": "moderate-jargon"
+      }
+    },
+    {
+      "id": "route_cbt_therapy_materials",
+      "scenario": "A behavioral health team needs a therapy education assistant over CBT worksheets, therapist notes, and psychology literature.",
+      "expected_domain": "psychology-mental-health",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "moderate",
+        "A3": "synthetic",
+        "A10": "far-jargon",
+        "A12": "gated"
+      }
+    },
+    {
+      "id": "route_counselor_wellbeing",
+      "scenario": "A counselor training product wants mental health guidance retrieval over wellbeing curricula and therapeutic education content.",
+      "expected_domain": "psychology-mental-health",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "moderate",
+        "A7": "periodic",
+        "A11": "mandatory"
+      }
+    },
+    {
+      "id": "route_bank_developer_portal_prioritizes_finance",
+      "scenario": "A bank developer portal needs API documentation search for PCI transaction integrations and customer support workflows.",
+      "expected_domain": "financial-banking",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "high",
+        "A4": "sectoral",
+        "A5": "regulated-personal"
+      }
+    },
+    {
+      "id": "route_generic_hr_policy_unknown",
+      "scenario": "The HR team wants an assistant over employee handbook pages, benefits explanations, and onboarding policy documents.",
+      "expected_domain": null,
+      "expected_pending": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12"],
+      "expected_attributes": {
+        "A1": null,
+        "A2": null,
+        "A3": null,
+        "A4": null,
+        "A5": null,
+        "A6": null,
+        "A7": null,
+        "A8": null,
+        "A9": null,
+        "A10": null,
+        "A11": null,
+        "A12": null
+      }
+    },
+    {
+      "id": "route_legal_discovery_unknown",
+      "scenario": "A legal discovery team wants RAG over contracts, deposition notes, and matter chronologies for internal research.",
+      "expected_domain": null,
+      "expected_pending": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12"],
+      "expected_attributes": {
+        "A1": null,
+        "A2": null,
+        "A3": null,
+        "A4": null,
+        "A5": null,
+        "A6": null,
+        "A7": null,
+        "A8": null,
+        "A9": null,
+        "A10": null,
+        "A11": null,
+        "A12": null
+      }
+    },
+    {
+      "id": "route_museum_archive_unknown",
+      "scenario": "A museum archive wants retrieval over exhibit labels, curator notes, scanned letters, and oral-history transcripts.",
+      "expected_domain": null,
+      "expected_pending": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12"],
+      "expected_attributes": {
+        "A1": null,
+        "A2": null,
+        "A3": null,
+        "A4": null,
+        "A5": null,
+        "A6": null,
+        "A7": null,
+        "A8": null,
+        "A9": null,
+        "A10": null,
+        "A11": null,
+        "A12": null
+      }
+    }
+  ],
+  "topology": []
+}

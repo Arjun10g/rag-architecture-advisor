@@ -11,6 +11,8 @@ into prompts, few-shot examples, or the retrieval corpus.
 - `v0_2_expanded.json` is the default gate. It expands retrieval coverage across
   matching, freshness, security, grounding, cost, IaC, deployment, and reference
   architecture documents, with additional routing/topology probes.
+- `v0_3_routing_stress.json` is a routing-only stress set for domain synonyms,
+  mixed-domain wording, and unknown-domain elicitation.
 
 ## Item Types
 
