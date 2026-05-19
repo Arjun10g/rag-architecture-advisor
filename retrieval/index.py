@@ -52,11 +52,16 @@ STOPWORDS = {
 }
 
 
-def reciprocal_rank_fusion(rankings: list[list[str]], k: int = 60) -> list[tuple[str, float]]:
+def reciprocal_rank_fusion(
+    rankings: list[list[str]],
+    k: int = 60,
+    weights: list[float] | None = None,
+) -> list[tuple[str, float]]:
+    weights = weights or [1.0] * len(rankings)
     scores: dict[str, float] = {}
-    for ranking in rankings:
+    for ranking, weight in zip(rankings, weights):
         for rank, doc_id in enumerate(ranking, start=1):
-            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+            scores[doc_id] = scores.get(doc_id, 0.0) + weight / (k + rank)
     return sorted(scores.items(), key=lambda item: item[1], reverse=True)
 
 
@@ -155,6 +160,8 @@ def _heading_intent_boost(query: QueryFeatures, leaf_section: str, section: str)
         "selection framework" in section_text or "decision matrix" in section_text
     ):
         boost += 45.0
+    if terms & {"matrix", "route", "routing"} and "routing matrix" in section_text:
+        boost += 65.0
     if "default" in terms and "default" in leaf_text:
         boost += 35.0
 

@@ -6,7 +6,7 @@ import json
 import math
 from pathlib import Path
 import sys
-from typing import Any
+from typing import Any, Callable
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -18,7 +18,8 @@ from retrieval.service import retrieve
 from synth.topology import select_topology
 
 
-DEFAULT_GOLD_PATH = Path(__file__).resolve().parent / "gold" / "v0_1_seed.json"
+DEFAULT_GOLD_PATH = Path(__file__).resolve().parent / "gold" / "v0_2_expanded.json"
+RetrieveFn = Callable[[str, str, int, dict[str, str] | None], list[SearchResult]]
 
 
 @dataclass
@@ -113,9 +114,21 @@ def _dcg(gains: list[int]) -> float:
     return sum(gain / math.log2(index + 2) for index, gain in enumerate(gains))
 
 
-def _score_retrieval_item(item: dict[str, Any]) -> tuple[dict[str, float], dict[str, Any] | None]:
+def _default_retrieve(
+    query: str,
+    namespace: str,
+    top_k: int,
+    filters: dict[str, str] | None,
+) -> list[SearchResult]:
+    return retrieve(query, namespace=namespace, top_k=top_k, filters=filters)
+
+
+def _score_retrieval_item(
+    item: dict[str, Any],
+    retrieve_fn: RetrieveFn,
+) -> tuple[dict[str, float], dict[str, Any] | None]:
     top_k = int(item.get("top_k", 10))
-    results = retrieve(
+    results = retrieve_fn(
         item["query"],
         namespace=item.get("namespace", "knowledge"),
         top_k=top_k,
@@ -129,7 +142,9 @@ def _score_retrieval_item(item: dict[str, Any]) -> tuple[dict[str, float], dict[
     mrr = 1.0 / min(hits) if hits else 0.0
 
     gains = _ranked_gains(results, item)
-    ideal_gains = sorted(([2] * len(required)) + ([1] * len(item.get("helpful", []))), reverse=True)[:top_k]
+    ideal_gains = sorted(
+        ([2] * len(required)) + ([1] * len(item.get("helpful", []))), reverse=True
+    )[:top_k]
     ndcg = _dcg(gains) / _dcg(ideal_gains) if ideal_gains else 1.0
 
     failure = None
@@ -145,11 +160,14 @@ def _score_retrieval_item(item: dict[str, Any]) -> tuple[dict[str, float], dict[
     return {"recall": recall, "mrr": mrr, "ndcg": ndcg}, failure
 
 
-def _score_retrieval(items: list[dict[str, Any]]) -> tuple[dict[str, float], list[dict[str, Any]]]:
+def _score_retrieval(
+    items: list[dict[str, Any]],
+    retrieve_fn: RetrieveFn,
+) -> tuple[dict[str, float], list[dict[str, Any]]]:
     scores = []
     failures = []
     for item in items:
-        item_scores, failure = _score_retrieval_item(item)
+        item_scores, failure = _score_retrieval_item(item, retrieve_fn)
         scores.append(item_scores)
         if failure:
             failures.append(failure)
@@ -164,7 +182,9 @@ def _score_retrieval(items: list[dict[str, Any]]) -> tuple[dict[str, float], lis
     )
 
 
-def _score_routing_item(item: dict[str, Any]) -> tuple[dict[str, float], dict[str, int], dict[str, Any] | None]:
+def _score_routing_item(
+    item: dict[str, Any],
+) -> tuple[dict[str, float], dict[str, int], dict[str, Any] | None]:
     state = resolve_requirements(AdvisorState(user_brief=item["scenario"]))
     domain_correct = state.domain_prior == item.get("expected_domain")
 
@@ -213,7 +233,9 @@ def _score_routing_item(item: dict[str, Any]) -> tuple[dict[str, float], dict[st
     )
 
 
-def _score_routing(items: list[dict[str, Any]]) -> tuple[dict[str, float], dict[str, int], list[dict[str, Any]]]:
+def _score_routing(
+    items: list[dict[str, Any]],
+) -> tuple[dict[str, float], dict[str, int], list[dict[str, Any]]]:
     scores = []
     counts = {
         "routing_attribute_total": 0,
@@ -280,9 +302,14 @@ def _score_topology(items: list[dict[str, Any]]) -> tuple[dict[str, float], list
     return {"topology_accuracy": accuracy, "topology_correctness": accuracy}, failures
 
 
-def run_eval(gold_path: str | Path = DEFAULT_GOLD_PATH) -> EvalReport:
+def run_eval(
+    gold_path: str | Path = DEFAULT_GOLD_PATH,
+    retrieve_fn: RetrieveFn | None = None,
+) -> EvalReport:
     gold = _load_gold(gold_path)
-    retrieval_metrics, retrieval_failures = _score_retrieval(gold.get("retrieval", []))
+    retrieval_metrics, retrieval_failures = _score_retrieval(
+        gold.get("retrieval", []), retrieve_fn or _default_retrieve
+    )
     routing_metrics, routing_counts, routing_failures = _score_routing(gold.get("routing", []))
     topology_metrics, topology_failures = _score_topology(gold.get("topology", []))
 
@@ -321,7 +348,9 @@ def _threshold_failures(report: EvalReport, thresholds: dict[str, float]) -> lis
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run deterministic advisor gold-set evals.")
     parser.add_argument("--gold", default=str(DEFAULT_GOLD_PATH), help="Path to a gold JSON file.")
-    parser.add_argument("--gate", action="store_true", help="Exit non-zero when configured thresholds fail.")
+    parser.add_argument(
+        "--gate", action="store_true", help="Exit non-zero when configured thresholds fail."
+    )
     args = parser.parse_args()
 
     gold = _load_gold(args.gold)

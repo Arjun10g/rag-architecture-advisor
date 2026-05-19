@@ -29,9 +29,23 @@ Track B is what the app produces: selected RAG topology, linked pipeline and dep
 ## Local Smoke Run
 
 ```bash
-python3 -m compileall app.py graph agents retrieval ingestion synth llm eval
+python3 -m compileall app.py graph agents retrieval ingestion synth llm eval scripts
 python3 eval/harness.py --gate
 python3 -c "from graph.build import build_graph; s = build_graph().invoke({'user_brief': 'internal API docs assistant'}); print(s.domain_prior)"
+```
+
+## Retrieval Modes
+
+The default `RETRIEVAL_MODE=lexical` path is dependency-light and used by CI. For
+dense retrieval experiments, copy `.env.example` into `.env`, install
+`requirements.txt`, and switch to `RETRIEVAL_MODE=dense` or `RETRIEVAL_MODE=hybrid`.
+
+The dense path uses `mixedbread-ai/mxbai-embed-large-v1`, a 1024-dimensional
+Matryoshka-capable embedding model. Run the dimension ablation after dependencies
+and model access are available:
+
+```bash
+python3 scripts/embedding_dim_ablation.py --gold eval/gold/v0_2_expanded.json --dimensions 1024,768,512,384,256
 ```
 
 When dependencies are installed:
