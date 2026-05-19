@@ -21,6 +21,8 @@ jobs:
         run: python scripts/ingestion_smoke.py
       - name: Retrieval smoke test
         run: python scripts/retrieval_smoke.py
+      - name: Gold-set eval gate
+        run: python eval/harness.py --gate
       - name: Graph smoke test
         run: |
           python -c "from graph.build import build_graph; s = build_graph().invoke({'user_brief': 'internal API docs assistant'}); assert s.draft_output; print(s.domain_prior)"

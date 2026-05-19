@@ -1,0 +1,335 @@
+{
+  "version": "gold_v0_1_seed",
+  "created": "2026-05-19",
+  "description": "Seed gold set for the first deterministic eval loop. This is intentionally small and should grow toward the full coverage matrix in Implementation Guide/08-gold-set-creation-plan.md. Retrieval thresholds pin the initial lexical baseline and should be raised after dense/hybrid retrieval lands.",
+  "thresholds": {
+    "retrieval_recall_at_10": 0.29,
+    "retrieval_mrr_at_10": 0.12,
+    "retrieval_ndcg_at_10": 0.3,
+    "routing_domain_accuracy": 0.8,
+    "routing_attribute_accuracy": 0.9,
+    "topology_accuracy": 1.0
+  },
+  "retrieval": [
+    {
+      "id": "ret_hybrid_pipeline_default",
+      "query": "For enterprise documents with mixed keyword and semantic queries, what production hybrid RAG pipeline with reranking should I use?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/03_retrieval_pipeline_patterns.md",
+          "section_contains": ["Production hybrid RAG pipeline"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/03_retrieval_pipeline_patterns.md",
+          "section_contains": ["Two-stage and three-stage ranking"]
+        }
+      ],
+      "tags": ["retrieval", "reranking", "hybrid"]
+    },
+    {
+      "id": "ret_context_packing_rules",
+      "query": "After retrieval and reranking, what rules should I use to pack context with metadata, deduplication, and source diversity?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/neural_search_matching_pipelines_reranking_md/03_retrieval_pipeline_patterns.md",
+          "section_contains": ["Context construction after retrieval"]
+        }
+      ],
+      "tags": ["context", "retrieval"]
+    },
+    {
+      "id": "ret_gold_set_methodology",
+      "query": "How should I build a RAG gold set with reference contexts, evidence labels, inter-annotator review, and retrieval metrics?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/04_gold_set_construction_methodology.md",
+          "section_contains": ["Gold-set object model"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/chunking_parsing_rag_evaluation_lit_review_md/04_gold_set_construction_methodology.md",
+          "section_contains": ["Evidence labeling"]
+        }
+      ],
+      "tags": ["evaluation", "gold-set"]
+    },
+    {
+      "id": "ret_acl_permission_aware",
+      "query": "How do I design permission-aware RAG so ACLs are propagated into chunk metadata and checked before prompt context?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/rag_security_governance_md/02_rbac_permission_aware_retrieval.md",
+          "section_contains": ["ACL propagation model"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/rag_security_governance_md/02_rbac_permission_aware_retrieval.md",
+          "section_contains": ["Pre-filter vs post-filter"]
+        }
+      ],
+      "tags": ["security", "acl"]
+    },
+    {
+      "id": "ret_iac_module_set",
+      "query": "Which Terraform modules should a production RAG advisor provision for vector databases, model endpoints, observability, and index aliases?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/iac_provisioning_ml_rag_md/05_iac_for_ml_rag_stacks.md",
+          "section_contains": ["Recommended module set for RAG advisor project"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/iac_provisioning_ml_rag_md/05_iac_for_ml_rag_stacks.md",
+          "section_contains": ["What Terraform should manage"]
+        }
+      ],
+      "tags": ["iac", "terraform"]
+    },
+    {
+      "id": "ret_blue_green_index_release",
+      "query": "What safe migration sequence should I use for blue-green vector index releases with validation gates and rollback?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/vector_ops_freshness_md/04_blue_green_reindex_index_versioning.md",
+          "section_contains": ["safe migration sequence"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/vector_ops_freshness_md/04_blue_green_reindex_index_versioning.md",
+          "section_contains": ["Validation gates"]
+        }
+      ],
+      "tags": ["freshness", "index-ops"]
+    },
+    {
+      "id": "ret_reranker_cost_fanout",
+      "query": "How should I model reranker cost as candidate fanout grows, and when can reranking save money?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/06_reranker_cost_modeling.md",
+          "section_contains": ["Fanout sensitivity"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/cost_modeling_vector_rag_md_bundle/06_reranker_cost_modeling.md",
+          "section_contains": ["When reranking saves money"]
+        }
+      ],
+      "tags": ["cost", "reranking"]
+    },
+    {
+      "id": "ret_context_compression_defaults",
+      "query": "When should I use extractive context compression, and what production defaults protect citations, tables, and code?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/rag_context_grounding_compression_md_files/04_context_compression.md",
+          "section_contains": ["Production defaults"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/rag_context_grounding_compression_md_files/04_context_compression.md",
+          "section_contains": ["Citation-preserving compression"]
+        }
+      ],
+      "tags": ["context", "compression"]
+    },
+    {
+      "id": "ret_file_search_use_case",
+      "query": "When is OpenAI File Search the right managed retrieval architecture, and what should the customer app still control?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/rag_reference_architectures_md/02_openai_file_search_reference_architecture.md",
+          "section_contains": ["When to use this architecture"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/rag_reference_architectures_md/02_openai_file_search_reference_architecture.md",
+          "section_contains": ["Security and governance"]
+        }
+      ],
+      "tags": ["reference-architecture", "managed-retrieval"]
+    },
+    {
+      "id": "ret_chunking_decision_rule",
+      "query": "How should I choose chunking and parsing strategy when table headers, code dependencies, or speaker metadata are the dominant failure mode?",
+      "namespace": "knowledge",
+      "top_k": 10,
+      "required": [
+        {
+          "path": "corpus/curated/chunking_parsing_md/04_selection_framework_and_decision_matrix.md",
+          "section_contains": ["central decision rule"]
+        }
+      ],
+      "helpful": [
+        {
+          "path": "corpus/curated/chunking_parsing_md/04_selection_framework_and_decision_matrix.md",
+          "section_contains": ["Decision tree"]
+        }
+      ],
+      "tags": ["chunking", "parsing"]
+    }
+  ],
+  "routing": [
+    {
+      "id": "route_medical_clinical",
+      "scenario": "We are building a clinical assistant for patient records and hospital guidelines. It must respect HIPAA-style constraints and use mandatory citations before a clinician sees an answer.",
+      "expected_domain": "medical-clinical",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "high",
+        "A3": "synthetic",
+        "A4": "sectoral",
+        "A5": "regulated-personal",
+        "A6": "semi-structured records + long hierarchical guidelines",
+        "A7": "periodic",
+        "A8": "strict if point-of-care, relaxed if research",
+        "A9": "monolingual",
+        "A10": "far-jargon",
+        "A11": "mandatory",
+        "A12": "gated"
+      }
+    },
+    {
+      "id": "route_financial_banking",
+      "scenario": "A bank wants a RAG assistant over transaction policies, PCI-related controls, and analyst procedures for customer-facing financial support.",
+      "expected_domain": "financial-banking",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "high",
+        "A3": "synthetic",
+        "A4": "sectoral",
+        "A5": "regulated-personal",
+        "A6": "tabular + long policy documents",
+        "A7": "periodic",
+        "A8": "strict for customer-facing, relaxed for analyst tools",
+        "A9": "monolingual",
+        "A10": "moderate-jargon",
+        "A11": "mandatory",
+        "A12": "advisory"
+      }
+    },
+    {
+      "id": "route_technical_software",
+      "scenario": "An internal developer portal needs answers over SDK docs, API references, code examples, and runbooks that change quickly.",
+      "expected_domain": "technical-software",
+      "expected_attributes": {
+        "A1": "costly",
+        "A2": "high",
+        "A3": "synthetic",
+        "A4": "none",
+        "A5": "public",
+        "A6": "code + markdown + mixed",
+        "A7": "fast-moving",
+        "A8": "strict",
+        "A9": "monolingual",
+        "A10": "moderate-jargon",
+        "A11": "recommended",
+        "A12": "none/advisory"
+      }
+    },
+    {
+      "id": "route_psychology_mental_health",
+      "scenario": "A mental health product needs a psychology literature advisor for therapeutic education content, with careful disclaimers and gated human review.",
+      "expected_domain": "psychology-mental-health",
+      "expected_attributes": {
+        "A1": "catastrophic",
+        "A2": "moderate",
+        "A3": "synthetic",
+        "A4": "privacy",
+        "A5": "public",
+        "A6": "narrative prose + long hierarchical literature",
+        "A7": "periodic",
+        "A8": "relaxed",
+        "A9": "monolingual",
+        "A10": "far-jargon",
+        "A11": "mandatory",
+        "A12": "gated"
+      }
+    },
+    {
+      "id": "route_novel_domain_elicit",
+      "scenario": "A museum archive wants visitors to ask questions over exhibit descriptions, curator notes, and scanned letters.",
+      "expected_domain": null,
+      "expected_pending": ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12"],
+      "expected_attributes": {
+        "A1": null,
+        "A2": null,
+        "A3": null,
+        "A4": null,
+        "A5": null,
+        "A6": null,
+        "A7": null,
+        "A8": null,
+        "A9": null,
+        "A10": null,
+        "A11": null,
+        "A12": null
+      }
+    }
+  ],
+  "topology": [
+    {
+      "id": "topology_agentic_multihop",
+      "requirement_vector": {
+        "A1": "costly",
+        "A2": "high",
+        "A3": "multi-hop"
+      },
+      "expected_topology": "adaptive_agentic"
+    },
+    {
+      "id": "topology_high_exact_costly",
+      "requirement_vector": {
+        "A1": "costly",
+        "A2": "high",
+        "A3": "synthetic"
+      },
+      "expected_topology": "two_stage_hybrid_rerank"
+    },
+    {
+      "id": "topology_high_exact_low_risk",
+      "requirement_vector": {
+        "A1": "minor",
+        "A2": "high",
+        "A3": "synthetic"
+      },
+      "expected_topology": "single_stage_hybrid"
+    },
+    {
+      "id": "topology_dense_rerank_default",
+      "requirement_vector": {
+        "A1": "minor",
+        "A2": "moderate",
+        "A3": "synthetic"
+      },
+      "expected_topology": "two_stage_dense_rerank"
+    }
+  ]
+}

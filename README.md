@@ -30,6 +30,7 @@ Track B is what the app produces: selected RAG topology, linked pipeline and dep
 
 ```bash
 python3 -m compileall app.py graph agents retrieval ingestion synth llm eval
+python3 eval/harness.py --gate
 python3 -c "from graph.build import build_graph; s = build_graph().invoke({'user_brief': 'internal API docs assistant'}); print(s.domain_prior)"
 ```
 
