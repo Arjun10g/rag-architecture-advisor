@@ -25,8 +25,8 @@ def main() -> None:
         raise SystemExit(f"knowledge namespace too small: {namespace_counts}")
     if element_counts.get("table", 0) == 0:
         raise SystemExit(f"no table chunks found: {element_counts}")
-    if element_counts.get("code", 0) == 0:
-        raise SystemExit(f"no code chunks found: {element_counts}")
+    if element_counts.get("code_fence", 0) == 0:
+        raise SystemExit(f"no fenced code chunks found: {element_counts}")
 
     print(f"manifest_docs={len(validation.data['documents'])}")
     print(f"chunks={index.count()}")

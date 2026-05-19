@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 import re
-from typing import Iterable
+from typing import Any, Iterable, Literal
 
 
-CHUNKER_VERSION = "md-structure-v2"
+CHUNKER_VERSION = "md-structure-v3"
 MAX_PROSE_WORDS = 1000
 PROSE_OVERLAP_WORDS = 120
 MIN_TINY_WORDS = 80
@@ -17,34 +17,96 @@ FENCE_OPEN_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 NUMBERED_LIST_RE = re.compile(r"^\s*\d+[\.)]\s+")
 TABLE_CELL_SEPARATOR_RE = re.compile(r"^:?-+:?$")
 
+ElementType = Literal[
+    "prose",
+    "code_fence",
+    "mermaid",
+    "table",
+    "list",
+    "reference",
+    "routing_card",
+    "routing_rule",
+]
+
 
 @dataclass
 class Chunk:
-    chunk_id: str
-    text_source: str
+    text_original: str
     text_for_embedding: str
-    text_for_generation: str
-    metadata: dict = field(default_factory=dict)
+    source_path: str
+    chunk_index: int
+    title: str
+    section_path: list[str]
+    element_type: ElementType
+    start_line: int | None = None  # 1-based inclusive document line.
+    end_line: int | None = None  # 1-based inclusive document line.
+    metadata: dict[str, Any] = field(default_factory=dict)
+    chunk_id: str = field(init=False)
+    content_hash: str = field(init=False)
+    document_id: str = field(init=False)
+    parent_id: str = field(init=False)
+    text_for_generation: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.document_id = _slug(Path(self.source_path).with_suffix("").as_posix())
+        hash_input = f"{self.source_path}\n{self.chunk_index}\n{self.text_for_embedding}"
+        self.content_hash = sha256(hash_input.encode("utf-8")).hexdigest()
+        self.chunk_id = f"{self.document_id}:{self.chunk_index:04d}:{self.content_hash[:10]}"
+        self.parent_id = f"{self.document_id}:{_slug('>'.join(self.section_path[:2] or [self.title]))}"
+        section = " > ".join(self.section_path)
+        self.text_for_generation = (
+            f"<SOURCE id=\"{self.chunk_id}\" title=\"{self.title}\" section=\"{section}\" "
+            f"file=\"{self.source_path}\">\n{self.text_original}\n</SOURCE>"
+        )
+        self.metadata.update(
+            {
+                "chunk_id": self.chunk_id,
+                "document_id": self.document_id,
+                "parent_id": self.parent_id,
+                "content_hash": f"sha256:{self.content_hash}",
+                "chunker_version": CHUNKER_VERSION,
+                "source_path": self.source_path,
+                "chunk_index": self.chunk_index,
+                "section_path": self.section_path,
+                "element_type": self.element_type,
+                "start_line": self.start_line,
+                "end_line": self.end_line,
+            }
+        )
+
+    @property
+    def text_source(self) -> str:
+        """Backward-compatible alias; prefer text_original in new code."""
+        return self.text_original
 
 
 @dataclass
 class Segment:
+    """Heading-delimited markdown segment.
+
+    start_line/end_line are 1-based inclusive document lines.
+    """
+
+    heading: str
     heading_level: int
     section_path: list[str]
     lines: list[str]
     start_line: int
     end_line: int
+    blocks: list["AtomicBlock"] = field(default_factory=list)
 
 
 @dataclass
 class AtomicBlock:
-    element_type: str
-    start: int
-    end: int
+    """Atomic block coordinates are zero-based inclusive offsets into Segment.lines."""
+
+    element_type: ElementType
+    start_offset: int
+    end_offset: int
     language: str | None = None
 
 
-def chunk_markdown_file(path: str | Path, metadata: dict | None = None) -> list[Chunk]:
+def chunk_markdown_file(path: str | Path, metadata: dict[str, Any] | None = None) -> list[Chunk]:
     path = Path(path)
     doc_metadata = dict(metadata or {})
     text = path.read_text(encoding="utf-8")
@@ -60,7 +122,9 @@ def chunk_markdown_file(path: str | Path, metadata: dict | None = None) -> list[
     return chunks
 
 
-def _chunk_routing_card(path: Path, title: str, lines: list[str], metadata: dict) -> list[Chunk]:
+def _chunk_routing_card(
+    path: Path, title: str, lines: list[str], metadata: dict[str, Any]
+) -> list[Chunk]:
     name = path.name
     if name.startswith("domain-"):
         source = "\n".join(lines).strip()
@@ -69,7 +133,7 @@ def _chunk_routing_card(path: Path, title: str, lines: list[str], metadata: dict
                 path=path,
                 title=title,
                 section_path=[title],
-                text_source=source,
+                text_original=source,
                 element_type="routing_card",
                 heading_level=1,
                 metadata=metadata,
@@ -79,7 +143,7 @@ def _chunk_routing_card(path: Path, title: str, lines: list[str], metadata: dict
 
     segments = _heading_segments(lines, max_heading_level=2)
     if not segments:
-        segments = [Segment(1, [title], lines, 1, len(lines))]
+        segments = [Segment(title, 1, [title], lines, 1, len(lines))]
 
     chunks: list[Chunk] = []
     for index, segment in enumerate(segments):
@@ -91,24 +155,24 @@ def _chunk_routing_card(path: Path, title: str, lines: list[str], metadata: dict
                 path=path,
                 title=title,
                 section_path=segment.section_path,
-                text_source=source,
+                text_original=source,
                 element_type="routing_rule",
                 heading_level=segment.heading_level,
                 metadata=metadata,
                 local_index=index,
-                line_start=segment.start_line,
-                line_end=segment.end_line,
+                start_line=segment.start_line,
+                end_line=segment.end_line,
             )
         )
     return chunks
 
 
 def _chunk_structured_markdown(
-    path: Path, title: str, lines: list[str], metadata: dict
+    path: Path, title: str, lines: list[str], metadata: dict[str, Any]
 ) -> list[Chunk]:
     segments = _heading_segments(lines, max_heading_level=3)
     if not segments:
-        segments = [Segment(1, [title], lines, 1, len(lines))]
+        segments = [Segment(title, 1, [title], lines, 1, len(lines))]
 
     chunks: list[Chunk] = []
     for segment_index, segment in enumerate(_merge_tiny_segments(segments)):
@@ -131,6 +195,7 @@ def _heading_segments(lines: list[str], max_heading_level: int) -> list[Segment]
         if any(line.strip() for line in current):
             segments.append(
                 Segment(
+                    heading=current_path[-1],
                     heading_level=current_level,
                     section_path=current_path[:],
                     lines=current[:],
@@ -197,6 +262,7 @@ def _merge_tiny_segments(segments: list[Segment]) -> list[Segment]:
             next_segment = segments[index + 1]
             merged.append(
                 Segment(
+                    heading=next_segment.heading,
                     heading_level=next_segment.heading_level,
                     section_path=next_segment.section_path,
                     lines=segment.lines + [""] + next_segment.lines,
@@ -219,10 +285,12 @@ def _chunk_segment(
     path: Path,
     title: str,
     segment: Segment,
-    metadata: dict,
+    metadata: dict[str, Any],
     segment_index: int,
 ) -> list[Chunk]:
-    blocks = _detect_atomic_blocks(segment.lines)
+    if not segment.blocks:
+        segment.blocks = _detect_atomic_blocks(segment.lines)
+    blocks = segment.blocks
     is_reference = any("reference" in part.lower() or "bibliography" in part.lower() for part in segment.section_path)
     chunks: list[Chunk] = []
 
@@ -234,13 +302,13 @@ def _chunk_segment(
                     path=path,
                     title=title,
                     section_path=segment.section_path,
-                    text_source=piece,
+                    text_original=piece,
                     element_type="reference" if is_reference else "prose",
                     heading_level=segment.heading_level,
                     metadata=metadata,
                     local_index=(segment_index * 1000) + piece_index,
-                    line_start=segment.start_line,
-                    line_end=segment.end_line,
+                    start_line=segment.start_line,
+                    end_line=segment.end_line,
                 )
             )
         return chunks
@@ -254,13 +322,13 @@ def _chunk_segment(
                     path=path,
                     title=title,
                     section_path=segment.section_path,
-                    text_source=piece,
+                    text_original=piece,
                     element_type="reference" if is_reference else "prose",
                     heading_level=segment.heading_level,
                     metadata=metadata,
                     local_index=(segment_index * 1000) + piece_index,
-                    line_start=segment.start_line,
-                    line_end=segment.end_line,
+                    start_line=segment.start_line,
+                    end_line=segment.end_line,
                 )
             )
 
@@ -271,13 +339,13 @@ def _chunk_segment(
                 path=path,
                 title=title,
                 section_path=segment.section_path,
-                text_source=source,
+                text_original=source,
                 element_type=block.element_type,
                 heading_level=segment.heading_level,
                 metadata=metadata,
                 local_index=(segment_index * 1000) + 500 + block_index,
-                line_start=segment.start_line + block.start,
-                line_end=segment.start_line + block.end,
+                start_line=segment.start_line + block.start_offset,
+                end_line=segment.start_line + block.end_offset,
                 block_language=block.language,
             )
         )
@@ -298,7 +366,7 @@ def _detect_atomic_blocks(lines: list[str]) -> list[AtomicBlock]:
                 if _is_fence_close(lines[candidate], (marker_char, marker_len)):
                     end = candidate
                     break
-            element = "mermaid" if language == "mermaid" else "code"
+            element: ElementType = "mermaid" if language == "mermaid" else "code_fence"
             blocks.append(AtomicBlock(element, index, end, language))
             index = end + 1
             continue
@@ -317,7 +385,7 @@ def _detect_atomic_blocks(lines: list[str]) -> list[AtomicBlock]:
                 NUMBERED_LIST_RE.match(lines[end + 1]) or not lines[end + 1].strip()
             ):
                 end += 1
-            blocks.append(AtomicBlock("algorithm", index, end))
+            blocks.append(AtomicBlock("list", index, end))
             index = end + 1
             continue
 
@@ -362,13 +430,13 @@ def _is_numbered_list_run(lines: list[str], index: int) -> bool:
 def _lines_without_blocks(lines: list[str], blocks: list[AtomicBlock]) -> list[str]:
     blocked = set()
     for block in blocks:
-        blocked.update(range(block.start, block.end + 1))
+        blocked.update(range(block.start_offset, block.end_offset + 1))
     return [line for idx, line in enumerate(lines) if idx not in blocked]
 
 
 def _block_with_context(lines: list[str], block: AtomicBlock) -> str:
-    start = block.start
-    end = block.end
+    start = block.start_offset
+    end = block.end_offset
     before = _nearest_context_line(lines, start - 1, reverse=True)
     after = _nearest_context_line(lines, end + 1, reverse=False)
     parts = []
@@ -426,51 +494,40 @@ def _make_chunk(
     path: Path,
     title: str,
     section_path: list[str],
-    text_source: str,
-    element_type: str,
+    text_original: str,
+    element_type: ElementType,
     heading_level: int,
-    metadata: dict,
+    metadata: dict[str, Any],
     local_index: int,
-    line_start: int | None = None,
-    line_end: int | None = None,
+    start_line: int | None = None,
+    end_line: int | None = None,
     block_language: str | None = None,
 ) -> Chunk:
     rel_path = metadata.get("path") or path.as_posix()
-    document_id = _slug(Path(rel_path).with_suffix("").as_posix())
-    content_hash = sha256(text_source.encode("utf-8")).hexdigest()
-    chunk_id = f"{document_id}:{local_index:04d}:{content_hash[:10]}"
-    parent_id = f"{document_id}:{_slug('>'.join(section_path[:2] or [title]))}"
     source_metadata = dict(metadata)
     source_metadata.update(
         {
-            "chunk_id": chunk_id,
-            "document_id": document_id,
-            "parent_id": parent_id,
-            "content_hash": f"sha256:{content_hash}",
             "chunker_version": CHUNKER_VERSION,
-            "section_path": section_path,
             "heading_level": heading_level,
-            "element_type": element_type,
             "block_language": block_language,
-            "line_start": line_start,
-            "line_end": line_end,
         }
     )
 
     section = " > ".join(section_path)
-    embedding_body = _linearize_table(text_source) if element_type == "table" else text_source
+    embedding_body = _linearize_table(text_original) if element_type == "table" else text_original
     tags = ", ".join(source_metadata.get("section_tags") or [])
     text_for_embedding = f"[Doc: {title}] [Section: {section}] [Tags: {tags}]\n{embedding_body}"
-    text_for_generation = (
-        f"<SOURCE id=\"{chunk_id}\" title=\"{title}\" section=\"{section}\" "
-        f"file=\"{rel_path}\">\n{text_source}\n</SOURCE>"
-    )
 
     return Chunk(
-        chunk_id=chunk_id,
-        text_source=text_source,
+        text_original=text_original,
         text_for_embedding=text_for_embedding,
-        text_for_generation=text_for_generation,
+        source_path=rel_path,
+        chunk_index=local_index,
+        title=title,
+        section_path=section_path,
+        element_type=element_type,
+        start_line=start_line,
+        end_line=end_line,
         metadata=source_metadata,
     )
 

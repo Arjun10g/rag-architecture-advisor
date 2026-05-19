@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import tempfile
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -48,7 +49,7 @@ After the code block.
 
 
 def main() -> None:
-    path = Path("/private/tmp/chunking_edge_fixture.md")
+    path = Path(tempfile.gettempdir()) / "chunking_edge_fixture.md"
     path.write_text(FIXTURE, encoding="utf-8")
     chunks = chunk_markdown_file(
         path,
@@ -71,12 +72,12 @@ def main() -> None:
         element = chunk.metadata["element_type"]
         element_counts[element] = element_counts.get(element, 0) + 1
 
-    if element_counts.get("code") != 2:
+    if element_counts.get("code_fence") != 2:
         raise SystemExit(f"expected two fenced code chunks: {element_counts}")
     if element_counts.get("table") != 1:
         raise SystemExit(f"expected compact one-column table chunk: {element_counts}")
-    if element_counts.get("algorithm") != 1:
-        raise SystemExit(f"expected 1) numbered list as algorithm: {element_counts}")
+    if element_counts.get("list") != 1:
+        raise SystemExit(f"expected 1) numbered list as list chunk: {element_counts}")
 
     print(f"sections={section_paths}")
     print(f"elements={element_counts}")
