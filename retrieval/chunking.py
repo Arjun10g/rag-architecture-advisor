@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+from html import escape
 from pathlib import Path
 import re
 from typing import Any, Iterable, Literal
@@ -60,6 +61,10 @@ class Chunk:
     `text_for_embedding` is allowed to be transformed, e.g. table linearization
     and metadata prefixes. IDs are derived in `__post_init__` so callers cannot
     accidentally duplicate or drift chunk IDs.
+
+    Treat `source_path`, `chunk_index`, and `text_for_embedding` as immutable
+    after construction. This dataclass stays mutable so relationship metadata can
+    be attached later, but derived IDs are not recomputed after `__post_init__`.
     """
 
     text_original: str
@@ -89,33 +94,37 @@ class Chunk:
         self.content_hash = sha256(hash_input.encode("utf-8")).hexdigest()
         self.chunk_id = f"{self.document_id}:{self.chunk_index:04d}:{self.content_hash[:10]}"
 
-        # Parent IDs are coarser section anchors used later for parent expansion.
+        # Parent IDs are coarser section anchors used later for parent expansion;
+        # they are grouping handles, not hard deduplication keys.
         self.parent_id = f"{self.document_id}:{_slug('>'.join(self.section_path[:2] or [self.title]))}"
         section = " > ".join(self.section_path)
 
         # Generation text is rendered as an explicit source block so downstream
         # prompts can cite by stable source ID without guessing boundaries.
+        source_id_attr = _xml_attr(self.chunk_id)
+        title_attr = _xml_attr(self.title)
+        section_attr = _xml_attr(section)
+        file_attr = _xml_attr(self.source_path)
         self.text_for_generation = (
-            f"<SOURCE id=\"{self.chunk_id}\" title=\"{self.title}\" section=\"{section}\" "
-            f"file=\"{self.source_path}\">\n{self.text_original}\n</SOURCE>"
+            f"<SOURCE id=\"{source_id_attr}\" title=\"{title_attr}\" section=\"{section_attr}\" "
+            f"file=\"{file_attr}\">\n{self.text_original}\n</SOURCE>"
         )
 
         # Mirror first-class fields into metadata for simple stores and filters.
-        self.metadata.update(
-            {
-                "chunk_id": self.chunk_id,
-                "document_id": self.document_id,
-                "parent_id": self.parent_id,
-                "content_hash": f"sha256:{self.content_hash}",
-                "chunker_version": CHUNKER_VERSION,
-                "source_path": self.source_path,
-                "chunk_index": self.chunk_index,
-                "section_path": self.section_path,
-                "element_type": self.element_type,
-                "start_line": self.start_line,
-                "end_line": self.end_line,
-            }
-        )
+        self.metadata = {
+            **self.metadata,
+            "chunk_id": self.chunk_id,
+            "document_id": self.document_id,
+            "parent_id": self.parent_id,
+            "content_hash": f"sha256:{self.content_hash}",
+            "chunker_version": CHUNKER_VERSION,
+            "source_path": self.source_path,
+            "chunk_index": self.chunk_index,
+            "section_path": self.section_path,
+            "element_type": self.element_type,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
+        }
 
     @property
     def text_source(self) -> str:
@@ -136,7 +145,7 @@ class Segment:
     lines: list[str]
     start_line: int
     end_line: int
-    blocks: list["AtomicBlock"] = field(default_factory=list)
+    blocks: list[AtomicBlock] = field(default_factory=list)
 
 
 @dataclass
@@ -740,3 +749,9 @@ def _slug(value: str) -> str:
 
     slug = re.sub(r"[^a-zA-Z0-9]+", "_", value.lower()).strip("_")
     return slug or "chunk"
+
+
+def _xml_attr(value: str) -> str:
+    """Escape SOURCE wrapper attributes while leaving markdown body text verbatim."""
+
+    return escape(value, quote=True)

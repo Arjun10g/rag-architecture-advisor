@@ -7,7 +7,7 @@ import tempfile
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from retrieval.chunking import chunk_markdown_file
+from retrieval.chunking import Chunk, chunk_markdown_file
 
 
 FIXTURE = """# Edge Fixture
@@ -78,6 +78,22 @@ def main() -> None:
         raise SystemExit(f"expected compact one-column table chunk: {element_counts}")
     if element_counts.get("list") != 1:
         raise SystemExit(f"expected 1) numbered list as list chunk: {element_counts}")
+
+    caller_metadata = {"caller": "kept"}
+    direct = Chunk(
+        text_original="raw body",
+        text_for_embedding="raw body",
+        source_path='corpus/edge/"odd<path>.md',
+        chunk_index=0,
+        title='A "quoted" <title>',
+        section_path=['A "quoted" <title>'],
+        element_type="prose",
+        metadata=caller_metadata,
+    )
+    if caller_metadata != {"caller": "kept"}:
+        raise SystemExit(f"direct Chunk mutated caller metadata: {caller_metadata}")
+    if "&quot;quoted&quot;" not in direct.text_for_generation or "&lt;title&gt;" not in direct.text_for_generation:
+        raise SystemExit(f"SOURCE attributes were not escaped: {direct.text_for_generation}")
 
     print(f"sections={section_paths}")
     print(f"elements={element_counts}")
