@@ -78,12 +78,35 @@ def _rank_of_first_match(results: list[SearchResult], evidence: dict[str, Any]) 
     return None
 
 
-def _gain(result: SearchResult, item: dict[str, Any]) -> int:
-    if any(_matches_evidence(result, evidence) for evidence in item.get("required", [])):
-        return 2
-    if any(_matches_evidence(result, evidence) for evidence in item.get("helpful", [])):
-        return 1
-    return 0
+def _evidence_key(evidence: dict[str, Any]) -> str:
+    return json.dumps(evidence, sort_keys=True)
+
+
+def _ranked_gains(results: list[SearchResult], item: dict[str, Any]) -> list[int]:
+    required = item.get("required", [])
+    helpful = item.get("helpful", [])
+    seen_required: set[str] = set()
+    seen_helpful: set[str] = set()
+    gains = []
+
+    for result in results:
+        gain = 0
+        for evidence in required:
+            key = _evidence_key(evidence)
+            if key not in seen_required and _matches_evidence(result, evidence):
+                seen_required.add(key)
+                gain = 2
+                break
+        if gain == 0:
+            for evidence in helpful:
+                key = _evidence_key(evidence)
+                if key not in seen_helpful and _matches_evidence(result, evidence):
+                    seen_helpful.add(key)
+                    gain = 1
+                    break
+        gains.append(gain)
+
+    return gains
 
 
 def _dcg(gains: list[int]) -> float:
@@ -105,7 +128,7 @@ def _score_retrieval_item(item: dict[str, Any]) -> tuple[dict[str, float], dict[
     recall = len(hits) / len(required) if required else 1.0
     mrr = 1.0 / min(hits) if hits else 0.0
 
-    gains = [_gain(result, item) for result in results]
+    gains = _ranked_gains(results, item)
     ideal_gains = sorted(([2] * len(required)) + ([1] * len(item.get("helpful", []))), reverse=True)[:top_k]
     ndcg = _dcg(gains) / _dcg(ideal_gains) if ideal_gains else 1.0
 

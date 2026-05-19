@@ -1,11 +1,11 @@
 {
   "version": "gold_v0_1_seed",
   "created": "2026-05-19",
-  "description": "Seed gold set for the first deterministic eval loop. This is intentionally small and should grow toward the full coverage matrix in Implementation Guide/08-gold-set-creation-plan.md. Retrieval thresholds pin the initial lexical baseline and should be raised after dense/hybrid retrieval lands.",
+  "description": "Seed gold set for the first deterministic eval loop. This is intentionally small and should grow toward the full coverage matrix in Implementation Guide/08-gold-set-creation-plan.md. Retrieval thresholds pin the current dependency-free lexical baseline and should be raised again after dense/hybrid retrieval lands.",
   "thresholds": {
-    "retrieval_recall_at_10": 0.29,
-    "retrieval_mrr_at_10": 0.12,
-    "retrieval_ndcg_at_10": 0.3,
+    "retrieval_recall_at_10": 0.95,
+    "retrieval_mrr_at_10": 0.5,
+    "retrieval_ndcg_at_10": 0.6,
     "routing_domain_accuracy": 0.8,
     "routing_attribute_accuracy": 0.9,
     "topology_accuracy": 1.0

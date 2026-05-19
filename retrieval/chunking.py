@@ -396,11 +396,31 @@ def _same_parent(left: Segment, right: Segment) -> bool:
     return left.section_path[:-1] == right.section_path[:-1]
 
 
+def _is_mergeable_tiny_heading(heading: str) -> bool:
+    """Return true for generic sparse headings that can safely borrow context."""
+
+    normalized = re.sub(r"[^a-z0-9]+", " ", heading.lower()).strip()
+    return normalized in {
+        "background",
+        "definition",
+        "definitions",
+        "example",
+        "examples",
+        "key points",
+        "notes",
+        "overview",
+        "purpose",
+        "scope",
+        "summary",
+    }
+
+
 def _merge_tiny_segments(segments: list[Segment]) -> list[Segment]:
     """Merge very small sibling sections into the next sibling.
 
-    This keeps sparse headings such as "Definition" from embedding as nearly
-    empty chunks while still refusing to cross parent-section boundaries.
+    This keeps generic sparse headings such as "Definition" from embedding as
+    nearly empty chunks while preserving substantive headings like "Fanout
+    sensitivity" as citable/retrievable section anchors.
     """
 
     if len(segments) < 2:
@@ -415,6 +435,7 @@ def _merge_tiny_segments(segments: list[Segment]) -> list[Segment]:
             words < MIN_TINY_WORDS
             and index + 1 < len(segments)
             and _same_parent(segment, segments[index + 1])
+            and _is_mergeable_tiny_heading(segment.heading)
         )
         if can_merge_forward:
             next_segment = segments[index + 1]
