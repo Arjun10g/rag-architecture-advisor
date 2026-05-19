@@ -7,14 +7,15 @@ import re
 from typing import Iterable
 
 
-CHUNKER_VERSION = "md-structure-v1"
+CHUNKER_VERSION = "md-structure-v2"
 MAX_PROSE_WORDS = 1000
 PROSE_OVERLAP_WORDS = 120
 MIN_TINY_WORDS = 80
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
-TABLE_SEPARATOR_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
-NUMBERED_LIST_RE = re.compile(r"^\s*\d+\.\s+")
+FENCE_OPEN_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
+NUMBERED_LIST_RE = re.compile(r"^\s*\d+[\.)]\s+")
+TABLE_CELL_SEPARATOR_RE = re.compile(r"^:?-+:?$")
 
 
 @dataclass
@@ -123,6 +124,7 @@ def _heading_segments(lines: list[str], max_heading_level: int) -> list[Segment]
     current_level = 1
     current_start = 1
     segments: list[Segment] = []
+    fence: tuple[str, int] | None = None
 
     def flush(end_line: int) -> None:
         nonlocal current
@@ -139,10 +141,22 @@ def _heading_segments(lines: list[str], max_heading_level: int) -> list[Segment]
         current = []
 
     for line_number, line in enumerate(lines, start=1):
+        if fence:
+            current.append(line)
+            if _is_fence_close(line, fence):
+                fence = None
+            continue
+
+        opening_fence = _fence_open(line)
+        if opening_fence:
+            fence = (opening_fence[0], opening_fence[1])
+            current.append(line)
+            continue
+
         match = HEADING_RE.match(line)
         if match:
             level = len(match.group(1))
-            heading = match.group(2).strip()
+            heading = _clean_heading(match.group(2))
             heading_stack[level] = heading
             for stale_level in list(heading_stack):
                 if stale_level > level:
@@ -275,12 +289,13 @@ def _detect_atomic_blocks(lines: list[str]) -> list[AtomicBlock]:
     index = 0
     while index < len(lines):
         line = lines[index]
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            language = stripped.removeprefix("```").strip() or None
+        opening_fence = _fence_open(line)
+        if opening_fence:
+            marker_char, marker_len, info = opening_fence
+            language = info.split(maxsplit=1)[0] if info else None
             end = index
             for candidate in range(index + 1, len(lines)):
-                if lines[candidate].strip().startswith("```"):
+                if _is_fence_close(lines[candidate], (marker_char, marker_len)):
                     end = candidate
                     break
             element = "mermaid" if language == "mermaid" else "code"
@@ -314,13 +329,20 @@ def _is_table_start(lines: list[str], index: int) -> bool:
     return (
         index + 1 < len(lines)
         and _looks_like_table_row(lines[index])
-        and TABLE_SEPARATOR_RE.match(lines[index + 1]) is not None
+        and _is_table_separator(lines[index + 1])
     )
 
 
 def _looks_like_table_row(line: str) -> bool:
     stripped = line.strip()
-    return stripped.startswith("|") and stripped.endswith("|") and stripped.count("|") >= 2
+    return "|" in stripped and stripped.count("|") >= 1
+
+
+def _is_table_separator(line: str) -> bool:
+    if not _looks_like_table_row(line):
+        return False
+    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+    return bool(cells) and all(TABLE_CELL_SEPARATOR_RE.match(cell) for cell in cells)
 
 
 def _is_numbered_list_run(lines: list[str], index: int) -> bool:
@@ -365,7 +387,12 @@ def _nearest_context_line(lines: list[str], start: int, reverse: bool) -> str | 
         iterator = range(start, len(lines))
     for idx in iterator:
         line = lines[idx].strip()
-        if not line or line.startswith("#") or line.startswith("```") or _looks_like_table_row(line):
+        if (
+            not line
+            or line.startswith("#")
+            or _fence_open(line)
+            or _looks_like_table_row(line)
+        ):
             continue
         return line
     return None
@@ -467,11 +494,41 @@ def _linearize_table(text: str) -> str:
 
 
 def _document_title(lines: list[str], path: Path) -> str:
+    fence: tuple[str, int] | None = None
     for line in lines:
+        if fence:
+            if _is_fence_close(line, fence):
+                fence = None
+            continue
+        opening_fence = _fence_open(line)
+        if opening_fence:
+            fence = (opening_fence[0], opening_fence[1])
+            continue
         match = HEADING_RE.match(line)
         if match and len(match.group(1)) == 1:
-            return match.group(2).strip()
+            return _clean_heading(match.group(2))
     return path.stem.replace("_", " ").replace("-", " ").title()
+
+
+def _fence_open(line: str) -> tuple[str, int, str] | None:
+    match = FENCE_OPEN_RE.match(line)
+    if not match:
+        return None
+    marker = match.group(1)
+    info = match.group(2).strip()
+    return marker[0], len(marker), info
+
+
+def _is_fence_close(line: str, fence: tuple[str, int]) -> bool:
+    marker_char, marker_len = fence
+    stripped = line.strip()
+    if not stripped or any(char != marker_char for char in stripped):
+        return False
+    return len(stripped) >= marker_len
+
+
+def _clean_heading(value: str) -> str:
+    return re.sub(r"\s+#{1,}\s*$", "", value).strip()
 
 
 def _word_count(text: str) -> int:
