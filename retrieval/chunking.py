@@ -53,6 +53,127 @@ ElementType = Literal[
 ]
 
 
+def _word_count(text: str) -> int:
+    """Cheap token approximation used only for chunk-size heuristics."""
+
+    return len(re.findall(r"\S+", text))
+
+
+def _last_words(text: str, count: int) -> str:
+    """Return the overlap tail used when splitting oversized prose."""
+
+    words = re.findall(r"\S+", text)
+    return " ".join(words[-count:])
+
+
+def _slug(value: str) -> str:
+    """Create stable lowercase identifiers for document and parent IDs."""
+
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", value.lower()).strip("_")
+    return slug or "chunk"
+
+
+def _xml_attr(value: str) -> str:
+    """Escape SOURCE wrapper attributes while leaving markdown body text verbatim."""
+
+    return escape(value, quote=True)
+
+
+def _clean_heading(value: str) -> str:
+    """Strip optional closing ATX heading markers, e.g. 'Title ##'."""
+
+    return re.sub(r"\s+#{1,}\s*$", "", value).strip()
+
+
+def _fence_open(line: str) -> tuple[str, int, str] | None:
+    """Return fence marker char, marker length, and info string for open fences."""
+
+    match = FENCE_OPEN_RE.match(line)
+    if not match:
+        return None
+    marker = match.group(1)
+    info = match.group(2).strip()
+    return marker[0], len(marker), info
+
+
+def _is_fence_close(line: str, fence: tuple[str, int]) -> bool:
+    """Check whether a line closes the active fenced block."""
+
+    marker_char, marker_len = fence
+    stripped = line.strip()
+    if not stripped or any(char != marker_char for char in stripped):
+        return False
+    return len(stripped) >= marker_len
+
+
+def _looks_like_table_row(line: str) -> bool:
+    """Return true for pipe-delimited rows, including compact one-column rows."""
+
+    stripped = line.strip()
+    return "|" in stripped and stripped.count("|") >= 1
+
+
+def _is_table_separator(line: str) -> bool:
+    """Return true for the delimiter row between table headers and body."""
+
+    if not _looks_like_table_row(line):
+        return False
+    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+    return bool(cells) and all(TABLE_CELL_SEPARATOR_RE.match(cell) for cell in cells)
+
+
+def _is_table_start(lines: list[str], index: int) -> bool:
+    """Detect a markdown table by header row plus separator row."""
+
+    return (
+        index + 1 < len(lines)
+        and _looks_like_table_row(lines[index])
+        and _is_table_separator(lines[index + 1])
+    )
+
+
+def _is_numbered_list_run(lines: list[str], index: int) -> bool:
+    """Return true for a run of at least three ordered-list items."""
+
+    if not NUMBERED_LIST_RE.match(lines[index]):
+        return False
+    count = 1
+    cursor = index + 1
+    while cursor < len(lines):
+        if NUMBERED_LIST_RE.match(lines[cursor]):
+            count += 1
+        elif lines[cursor].strip():
+            break
+        cursor += 1
+    return count >= 3
+
+
+@dataclass
+class AtomicBlock:
+    """Atomic block coordinates are zero-based inclusive offsets into Segment.lines."""
+
+    element_type: ElementType
+    start_offset: int
+    end_offset: int
+    language: str | None = None
+
+
+@dataclass
+class Segment:
+    """Heading-delimited markdown segment.
+
+    start_line/end_line are 1-based inclusive document lines.
+    """
+
+    heading: str
+    heading_level: int
+    section_path: list[str]
+    lines: list[str]
+    start_line: int
+    end_line: int
+    blocks: list[AtomicBlock] = field(default_factory=list)
+
+
 @dataclass
 class Chunk:
     """A generated retrieval unit plus the provenance needed to cite it.
@@ -132,119 +253,205 @@ class Chunk:
         return self.text_original
 
 
-@dataclass
-class Segment:
-    """Heading-delimited markdown segment.
+def _linearize_table(text: str) -> str:
+    """Render markdown tables as header-preserving row text for embeddings."""
 
-    start_line/end_line are 1-based inclusive document lines.
-    """
-
-    heading: str
-    heading_level: int
-    section_path: list[str]
-    lines: list[str]
-    start_line: int
-    end_line: int
-    blocks: list[AtomicBlock] = field(default_factory=list)
+    rows = [line.strip().strip("|") for line in text.splitlines() if _looks_like_table_row(line)]
+    if len(rows) < 3:
+        return text
+    headers = [cell.strip() for cell in rows[0].split("|")]
+    rendered = []
+    for row in rows[2:]:
+        cells = [cell.strip() for cell in row.split("|")]
+        rendered.append("; ".join(f"{header}: {cell}" for header, cell in zip(headers, cells)))
+    return "\n".join(rendered) or text
 
 
-@dataclass
-class AtomicBlock:
-    """Atomic block coordinates are zero-based inclusive offsets into Segment.lines."""
+def _lines_without_blocks(lines: list[str], blocks: list[AtomicBlock]) -> list[str]:
+    """Remove atomic block ranges so prose can be chunked separately."""
 
-    element_type: ElementType
-    start_offset: int
-    end_offset: int
-    language: str | None = None
+    blocked = set()
+    for block in blocks:
+        blocked.update(range(block.start_offset, block.end_offset + 1))
+    return [line for idx, line in enumerate(lines) if idx not in blocked]
 
 
-def chunk_markdown_file(path: str | Path, metadata: dict[str, Any] | None = None) -> list[Chunk]:
-    """Parse one markdown file into generated chunks.
+def _nearest_context_line(lines: list[str], start: int, reverse: bool) -> str | None:
+    """Find the nearest non-structural line before or after an atomic block."""
 
-    Routing cards intentionally use a stricter chunking path than knowledge
-    corpus files: the router needs whole rules/cards, while knowledge retrieval
-    benefits from subsection and atomic-block granularity.
-    """
-
-    path = Path(path)
-    doc_metadata = dict(metadata or {})
-    text = path.read_text(encoding="utf-8")
-    lines = text.splitlines()
-    title = _document_title(lines, path)
-
-    if doc_metadata.get("content_kind") == "routing-card":
-        chunks = _chunk_routing_card(path, title, lines, doc_metadata)
+    if reverse:
+        iterator: Iterable[int] = range(start, -1, -1)
     else:
-        chunks = _chunk_structured_markdown(path, title, lines, doc_metadata)
+        iterator = range(start, len(lines))
+    for idx in iterator:
+        line = lines[idx].strip()
+        if (
+            not line
+            or line.startswith("#")
+            or _fence_open(line)
+            or _looks_like_table_row(line)
+        ):
+            continue
+        return line
+    return None
 
-    _attach_relationships(chunks)
-    return chunks
+
+def _block_with_context(lines: list[str], block: AtomicBlock) -> str:
+    """Render an atomic block with one nearby explanatory line when present."""
+
+    start = block.start_offset
+    end = block.end_offset
+    before = _nearest_context_line(lines, start - 1, reverse=True)
+    after = _nearest_context_line(lines, end + 1, reverse=False)
+    parts = []
+    if before:
+        parts.append(before)
+    parts.extend(lines[start : end + 1])
+    if after:
+        parts.append(after)
+    return "\n".join(parts)
 
 
-def _chunk_routing_card(
-    path: Path, title: str, lines: list[str], metadata: dict[str, Any]
-) -> list[Chunk]:
-    """Chunk router documents as rules, not free prose.
+def _split_prose(text: str) -> list[str]:
+    """Split oversized prose on paragraph boundaries with word overlap."""
 
-    Domain profiles are each one atomic card. The taxonomy and decision-logic
-    files are split by H2 so each attribute/stage can be retrieved as a whole.
+    if _word_count(text) <= MAX_PROSE_WORDS:
+        return [text]
+
+    paragraphs = [paragraph for paragraph in text.split("\n\n") if paragraph.strip()]
+    chunks: list[Chunk] = []
+    current: list[str] = []
+    current_words = 0
+
+    for paragraph in paragraphs:
+        words = _word_count(paragraph)
+        if current and current_words + words > MAX_PROSE_WORDS:
+            chunks.append("\n\n".join(current).strip())
+            overlap = _last_words(chunks[-1], PROSE_OVERLAP_WORDS)
+            current = [overlap] if overlap else []
+            current_words = _word_count(overlap)
+        current.append(paragraph)
+        current_words += words
+
+    if current:
+        chunks.append("\n\n".join(current).strip())
+    return [chunk for chunk in chunks if chunk]
+
+
+def _detect_atomic_blocks(lines: list[str]) -> list[AtomicBlock]:
+    """Find tables, fenced blocks, and ordered procedures inside a segment.
+
+    Offsets are relative to `Segment.lines`, zero-based, and inclusive.
     """
 
-    name = path.name
-    if name.startswith("domain-"):
-        source = "\n".join(lines).strip()
-        return [
-            _make_chunk(
-                path=path,
-                title=title,
-                section_path=[title],
-                text_original=source,
-                element_type="routing_card",
-                heading_level=1,
-                metadata=metadata,
-                local_index=0,
-            )
-        ]
-
-    segments = _heading_segments(lines, max_heading_level=2)
-    if not segments:
-        segments = [Segment(title, 1, [title], lines, 1, len(lines))]
-
-    chunks: list[Chunk] = []
-    for index, segment in enumerate(segments):
-        source = "\n".join(segment.lines).strip()
-        if not source:
+    blocks: list[AtomicBlock] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        opening_fence = _fence_open(line)
+        if opening_fence:
+            # A fence is always atomic. We scan forward to the matching close
+            # marker and never inspect its contents for tables/headings/lists.
+            marker_char, marker_len, info = opening_fence
+            language = info.split(maxsplit=1)[0] if info else None
+            end = index
+            for candidate in range(index + 1, len(lines)):
+                if _is_fence_close(lines[candidate], (marker_char, marker_len)):
+                    end = candidate
+                    break
+            element: ElementType = "mermaid" if language == "mermaid" else "code_fence"
+            blocks.append(AtomicBlock(element, index, end, language))
+            index = end + 1
             continue
-        chunks.append(
-            _make_chunk(
-                path=path,
-                title=title,
-                section_path=segment.section_path,
-                text_original=source,
-                element_type="routing_rule",
-                heading_level=segment.heading_level,
-                metadata=metadata,
-                local_index=index,
-                start_line=segment.start_line,
-                end_line=segment.end_line,
-            )
+
+        if _is_table_start(lines, index):
+            # Once a table header + delimiter row is found, all following table
+            # rows travel together so headers are never separated from values.
+            end = index + 1
+            while end + 1 < len(lines) and _looks_like_table_row(lines[end + 1]):
+                end += 1
+            blocks.append(AtomicBlock("table", index, end))
+            index = end + 1
+            continue
+
+        if _is_numbered_list_run(lines, index):
+            # Treat 3+ numbered items as one procedural/list chunk. Shorter
+            # numbered snippets are usually prose examples in this corpus.
+            end = index
+            while end + 1 < len(lines) and (
+                NUMBERED_LIST_RE.match(lines[end + 1]) or not lines[end + 1].strip()
+            ):
+                end += 1
+            blocks.append(AtomicBlock("list", index, end))
+            index = end + 1
+            continue
+
+        index += 1
+    return blocks
+
+
+def _same_parent(left: Segment, right: Segment) -> bool:
+    """Return true when two segments are siblings under the same breadcrumb."""
+
+    return left.section_path[:-1] == right.section_path[:-1]
+
+
+def _merge_tiny_segments(segments: list[Segment]) -> list[Segment]:
+    """Merge very small sibling sections into the next sibling.
+
+    This keeps sparse headings such as "Definition" from embedding as nearly
+    empty chunks while still refusing to cross parent-section boundaries.
+    """
+
+    if len(segments) < 2:
+        return segments
+
+    merged: list[Segment] = []
+    index = 0
+    while index < len(segments):
+        segment = segments[index]
+        words = _word_count("\n".join(segment.lines))
+        can_merge_forward = (
+            words < MIN_TINY_WORDS
+            and index + 1 < len(segments)
+            and _same_parent(segment, segments[index + 1])
         )
-    return chunks
+        if can_merge_forward:
+            next_segment = segments[index + 1]
+            merged.append(
+                Segment(
+                    heading=next_segment.heading,
+                    heading_level=next_segment.heading_level,
+                    section_path=next_segment.section_path,
+                    lines=segment.lines + [""] + next_segment.lines,
+                    start_line=segment.start_line,
+                    end_line=next_segment.end_line,
+                )
+            )
+            index += 2
+        else:
+            merged.append(segment)
+            index += 1
+    return merged
 
 
-def _chunk_structured_markdown(
-    path: Path, title: str, lines: list[str], metadata: dict[str, Any]
-) -> list[Chunk]:
-    """Chunk regular corpus files by markdown heading structure."""
+def _document_title(lines: list[str], path: Path) -> str:
+    """Find the first H1 outside fenced code; fall back to the filename."""
 
-    segments = _heading_segments(lines, max_heading_level=3)
-    if not segments:
-        segments = [Segment(title, 1, [title], lines, 1, len(lines))]
-
-    chunks: list[Chunk] = []
-    for segment_index, segment in enumerate(_merge_tiny_segments(segments)):
-        chunks.extend(_chunk_segment(path, title, segment, metadata, segment_index))
-    return chunks
+    fence: tuple[str, int] | None = None
+    for line in lines:
+        if fence:
+            if _is_fence_close(line, fence):
+                fence = None
+            continue
+        opening_fence = _fence_open(line)
+        if opening_fence:
+            fence = (opening_fence[0], opening_fence[1])
+            continue
+        match = HEADING_RE.match(line)
+        if match and len(match.group(1)) == 1:
+            return _clean_heading(match.group(2))
+    return path.stem.replace("_", " ").replace("-", " ").title()
 
 
 def _heading_segments(lines: list[str], max_heading_level: int) -> list[Segment]:
@@ -329,49 +536,58 @@ def _heading_segments(lines: list[str], max_heading_level: int) -> list[Segment]
     return segments
 
 
-def _merge_tiny_segments(segments: list[Segment]) -> list[Segment]:
-    """Merge very small sibling sections into the next sibling.
+def _make_chunk(
+    path: Path,
+    title: str,
+    section_path: list[str],
+    text_original: str,
+    element_type: ElementType,
+    heading_level: int,
+    metadata: dict[str, Any],
+    local_index: int,
+    start_line: int | None = None,
+    end_line: int | None = None,
+    block_language: str | None = None,
+) -> Chunk:
+    """Create a `Chunk` with all renderings and provenance fields populated."""
 
-    This keeps sparse headings such as "Definition" from embedding as nearly
-    empty chunks while still refusing to cross parent-section boundaries.
-    """
+    rel_path = metadata.get("path") or path.as_posix()
+    source_metadata = dict(metadata)
+    source_metadata.update(
+        {
+            "chunker_version": CHUNKER_VERSION,
+            "heading_level": heading_level,
+            "block_language": block_language,
+        }
+    )
 
-    if len(segments) < 2:
-        return segments
+    section = " > ".join(section_path)
+    # Tables embed better after linearization, but citation uses the original
+    # markdown table through `text_original`.
+    embedding_body = _linearize_table(text_original) if element_type == "table" else text_original
+    tags = ", ".join(source_metadata.get("section_tags") or [])
+    text_for_embedding = f"[Doc: {title}] [Section: {section}] [Tags: {tags}]\n{embedding_body}"
 
-    merged: list[Segment] = []
-    index = 0
-    while index < len(segments):
-        segment = segments[index]
-        words = _word_count("\n".join(segment.lines))
-        can_merge_forward = (
-            words < MIN_TINY_WORDS
-            and index + 1 < len(segments)
-            and _same_parent(segment, segments[index + 1])
-        )
-        if can_merge_forward:
-            next_segment = segments[index + 1]
-            merged.append(
-                Segment(
-                    heading=next_segment.heading,
-                    heading_level=next_segment.heading_level,
-                    section_path=next_segment.section_path,
-                    lines=segment.lines + [""] + next_segment.lines,
-                    start_line=segment.start_line,
-                    end_line=next_segment.end_line,
-                )
-            )
-            index += 2
-        else:
-            merged.append(segment)
-            index += 1
-    return merged
+    return Chunk(
+        text_original=text_original,
+        text_for_embedding=text_for_embedding,
+        source_path=rel_path,
+        chunk_index=local_index,
+        title=title,
+        section_path=section_path,
+        element_type=element_type,
+        start_line=start_line,
+        end_line=end_line,
+        metadata=source_metadata,
+    )
 
 
-def _same_parent(left: Segment, right: Segment) -> bool:
-    """Return true when two segments are siblings under the same breadcrumb."""
+def _attach_relationships(chunks: list[Chunk]) -> None:
+    """Attach local previous/next links after all chunk IDs have been generated."""
 
-    return left.section_path[:-1] == right.section_path[:-1]
+    for index, chunk in enumerate(chunks):
+        chunk.metadata["previous"] = chunks[index - 1].chunk_id if index > 0 else None
+        chunk.metadata["next"] = chunks[index + 1].chunk_id if index + 1 < len(chunks) else None
 
 
 def _chunk_segment(
@@ -452,306 +668,90 @@ def _chunk_segment(
     return chunks
 
 
-def _detect_atomic_blocks(lines: list[str]) -> list[AtomicBlock]:
-    """Find tables, fenced blocks, and ordered procedures inside a segment.
+def _chunk_structured_markdown(
+    path: Path, title: str, lines: list[str], metadata: dict[str, Any]
+) -> list[Chunk]:
+    """Chunk regular corpus files by markdown heading structure."""
 
-    Offsets are relative to `Segment.lines`, zero-based, and inclusive.
+    segments = _heading_segments(lines, max_heading_level=3)
+    if not segments:
+        segments = [Segment(title, 1, [title], lines, 1, len(lines))]
+
+    chunks: list[str] = []
+    for segment_index, segment in enumerate(_merge_tiny_segments(segments)):
+        chunks.extend(_chunk_segment(path, title, segment, metadata, segment_index))
+    return chunks
+
+
+def _chunk_routing_card(
+    path: Path, title: str, lines: list[str], metadata: dict[str, Any]
+) -> list[Chunk]:
+    """Chunk router documents as rules, not free prose.
+
+    Domain profiles are each one atomic card. The taxonomy and decision-logic
+    files are split by H2 so each attribute/stage can be retrieved as a whole.
     """
 
-    blocks: list[AtomicBlock] = []
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        opening_fence = _fence_open(line)
-        if opening_fence:
-            # A fence is always atomic. We scan forward to the matching close
-            # marker and never inspect its contents for tables/headings/lists.
-            marker_char, marker_len, info = opening_fence
-            language = info.split(maxsplit=1)[0] if info else None
-            end = index
-            for candidate in range(index + 1, len(lines)):
-                if _is_fence_close(lines[candidate], (marker_char, marker_len)):
-                    end = candidate
-                    break
-            element: ElementType = "mermaid" if language == "mermaid" else "code_fence"
-            blocks.append(AtomicBlock(element, index, end, language))
-            index = end + 1
+    name = path.name
+    if name.startswith("domain-"):
+        source = "\n".join(lines).strip()
+        return [
+            _make_chunk(
+                path=path,
+                title=title,
+                section_path=[title],
+                text_original=source,
+                element_type="routing_card",
+                heading_level=1,
+                metadata=metadata,
+                local_index=0,
+            )
+        ]
+
+    segments = _heading_segments(lines, max_heading_level=2)
+    if not segments:
+        segments = [Segment(title, 1, [title], lines, 1, len(lines))]
+
+    chunks: list[Chunk] = []
+    for index, segment in enumerate(segments):
+        source = "\n".join(segment.lines).strip()
+        if not source:
             continue
-
-        if _is_table_start(lines, index):
-            # Once a table header + delimiter row is found, all following table
-            # rows travel together so headers are never separated from values.
-            end = index + 1
-            while end + 1 < len(lines) and _looks_like_table_row(lines[end + 1]):
-                end += 1
-            blocks.append(AtomicBlock("table", index, end))
-            index = end + 1
-            continue
-
-        if _is_numbered_list_run(lines, index):
-            # Treat 3+ numbered items as one procedural/list chunk. Shorter
-            # numbered snippets are usually prose examples in this corpus.
-            end = index
-            while end + 1 < len(lines) and (
-                NUMBERED_LIST_RE.match(lines[end + 1]) or not lines[end + 1].strip()
-            ):
-                end += 1
-            blocks.append(AtomicBlock("list", index, end))
-            index = end + 1
-            continue
-
-        index += 1
-    return blocks
+        chunks.append(
+            _make_chunk(
+                path=path,
+                title=title,
+                section_path=segment.section_path,
+                text_original=source,
+                element_type="routing_rule",
+                heading_level=segment.heading_level,
+                metadata=metadata,
+                local_index=index,
+                start_line=segment.start_line,
+                end_line=segment.end_line,
+            )
+        )
+    return chunks
 
 
-def _is_table_start(lines: list[str], index: int) -> bool:
-    """Detect a markdown table by header row plus separator row."""
+def chunk_markdown_file(path: str | Path, metadata: dict[str, Any] | None = None) -> list[Chunk]:
+    """Parse one markdown file into generated chunks.
 
-    return (
-        index + 1 < len(lines)
-        and _looks_like_table_row(lines[index])
-        and _is_table_separator(lines[index + 1])
-    )
+    Routing cards intentionally use a stricter chunking path than knowledge
+    corpus files: the router needs whole rules/cards, while knowledge retrieval
+    benefits from subsection and atomic-block granularity.
+    """
 
+    path = Path(path)
+    doc_metadata = dict(metadata or {})
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    title = _document_title(lines, path)
 
-def _looks_like_table_row(line: str) -> bool:
-    """Return true for pipe-delimited rows, including compact one-column rows."""
-
-    stripped = line.strip()
-    return "|" in stripped and stripped.count("|") >= 1
-
-
-def _is_table_separator(line: str) -> bool:
-    """Return true for the delimiter row between table headers and body."""
-
-    if not _looks_like_table_row(line):
-        return False
-    cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-    return bool(cells) and all(TABLE_CELL_SEPARATOR_RE.match(cell) for cell in cells)
-
-
-def _is_numbered_list_run(lines: list[str], index: int) -> bool:
-    """Return true for a run of at least three ordered-list items."""
-
-    if not NUMBERED_LIST_RE.match(lines[index]):
-        return False
-    count = 1
-    cursor = index + 1
-    while cursor < len(lines):
-        if NUMBERED_LIST_RE.match(lines[cursor]):
-            count += 1
-        elif lines[cursor].strip():
-            break
-        cursor += 1
-    return count >= 3
-
-
-def _lines_without_blocks(lines: list[str], blocks: list[AtomicBlock]) -> list[str]:
-    """Remove atomic block ranges so prose can be chunked separately."""
-
-    blocked = set()
-    for block in blocks:
-        blocked.update(range(block.start_offset, block.end_offset + 1))
-    return [line for idx, line in enumerate(lines) if idx not in blocked]
-
-
-def _block_with_context(lines: list[str], block: AtomicBlock) -> str:
-    """Render an atomic block with one nearby explanatory line when present."""
-
-    start = block.start_offset
-    end = block.end_offset
-    before = _nearest_context_line(lines, start - 1, reverse=True)
-    after = _nearest_context_line(lines, end + 1, reverse=False)
-    parts = []
-    if before:
-        parts.append(before)
-    parts.extend(lines[start : end + 1])
-    if after:
-        parts.append(after)
-    return "\n".join(parts)
-
-
-def _nearest_context_line(lines: list[str], start: int, reverse: bool) -> str | None:
-    """Find the nearest non-structural line before or after an atomic block."""
-
-    if reverse:
-        iterator: Iterable[int] = range(start, -1, -1)
+    if doc_metadata.get("content_kind") == "routing-card":
+        chunks = _chunk_routing_card(path, title, lines, doc_metadata)
     else:
-        iterator = range(start, len(lines))
-    for idx in iterator:
-        line = lines[idx].strip()
-        if (
-            not line
-            or line.startswith("#")
-            or _fence_open(line)
-            or _looks_like_table_row(line)
-        ):
-            continue
-        return line
-    return None
+        chunks = _chunk_structured_markdown(path, title, lines, doc_metadata)
 
-
-def _split_prose(text: str) -> list[str]:
-    """Split oversized prose on paragraph boundaries with word overlap."""
-
-    if _word_count(text) <= MAX_PROSE_WORDS:
-        return [text]
-
-    paragraphs = [paragraph for paragraph in text.split("\n\n") if paragraph.strip()]
-    chunks: list[str] = []
-    current: list[str] = []
-    current_words = 0
-
-    for paragraph in paragraphs:
-        words = _word_count(paragraph)
-        if current and current_words + words > MAX_PROSE_WORDS:
-            chunks.append("\n\n".join(current).strip())
-            overlap = _last_words(chunks[-1], PROSE_OVERLAP_WORDS)
-            current = [overlap] if overlap else []
-            current_words = _word_count(overlap)
-        current.append(paragraph)
-        current_words += words
-
-    if current:
-        chunks.append("\n\n".join(current).strip())
-    return [chunk for chunk in chunks if chunk]
-
-
-def _make_chunk(
-    path: Path,
-    title: str,
-    section_path: list[str],
-    text_original: str,
-    element_type: ElementType,
-    heading_level: int,
-    metadata: dict[str, Any],
-    local_index: int,
-    start_line: int | None = None,
-    end_line: int | None = None,
-    block_language: str | None = None,
-) -> Chunk:
-    """Create a `Chunk` with all renderings and provenance fields populated."""
-
-    rel_path = metadata.get("path") or path.as_posix()
-    source_metadata = dict(metadata)
-    source_metadata.update(
-        {
-            "chunker_version": CHUNKER_VERSION,
-            "heading_level": heading_level,
-            "block_language": block_language,
-        }
-    )
-
-    section = " > ".join(section_path)
-    # Tables embed better after linearization, but citation uses the original
-    # markdown table through `text_original`.
-    embedding_body = _linearize_table(text_original) if element_type == "table" else text_original
-    tags = ", ".join(source_metadata.get("section_tags") or [])
-    text_for_embedding = f"[Doc: {title}] [Section: {section}] [Tags: {tags}]\n{embedding_body}"
-
-    return Chunk(
-        text_original=text_original,
-        text_for_embedding=text_for_embedding,
-        source_path=rel_path,
-        chunk_index=local_index,
-        title=title,
-        section_path=section_path,
-        element_type=element_type,
-        start_line=start_line,
-        end_line=end_line,
-        metadata=source_metadata,
-    )
-
-
-def _attach_relationships(chunks: list[Chunk]) -> None:
-    """Attach local previous/next links after all chunk IDs have been generated."""
-
-    for index, chunk in enumerate(chunks):
-        chunk.metadata["previous"] = chunks[index - 1].chunk_id if index > 0 else None
-        chunk.metadata["next"] = chunks[index + 1].chunk_id if index + 1 < len(chunks) else None
-
-
-def _linearize_table(text: str) -> str:
-    """Render markdown tables as header-preserving row text for embeddings."""
-
-    rows = [line.strip().strip("|") for line in text.splitlines() if _looks_like_table_row(line)]
-    if len(rows) < 3:
-        return text
-    headers = [cell.strip() for cell in rows[0].split("|")]
-    rendered = []
-    for row in rows[2:]:
-        cells = [cell.strip() for cell in row.split("|")]
-        rendered.append("; ".join(f"{header}: {cell}" for header, cell in zip(headers, cells)))
-    return "\n".join(rendered) or text
-
-
-def _document_title(lines: list[str], path: Path) -> str:
-    """Find the first H1 outside fenced code; fall back to the filename."""
-
-    fence: tuple[str, int] | None = None
-    for line in lines:
-        if fence:
-            if _is_fence_close(line, fence):
-                fence = None
-            continue
-        opening_fence = _fence_open(line)
-        if opening_fence:
-            fence = (opening_fence[0], opening_fence[1])
-            continue
-        match = HEADING_RE.match(line)
-        if match and len(match.group(1)) == 1:
-            return _clean_heading(match.group(2))
-    return path.stem.replace("_", " ").replace("-", " ").title()
-
-
-def _fence_open(line: str) -> tuple[str, int, str] | None:
-    """Return fence marker char, marker length, and info string for open fences."""
-
-    match = FENCE_OPEN_RE.match(line)
-    if not match:
-        return None
-    marker = match.group(1)
-    info = match.group(2).strip()
-    return marker[0], len(marker), info
-
-
-def _is_fence_close(line: str, fence: tuple[str, int]) -> bool:
-    """Check whether a line closes the active fenced block."""
-
-    marker_char, marker_len = fence
-    stripped = line.strip()
-    if not stripped or any(char != marker_char for char in stripped):
-        return False
-    return len(stripped) >= marker_len
-
-
-def _clean_heading(value: str) -> str:
-    """Strip optional closing ATX heading markers, e.g. 'Title ##'."""
-
-    return re.sub(r"\s+#{1,}\s*$", "", value).strip()
-
-
-def _word_count(text: str) -> int:
-    """Cheap token approximation used only for chunk-size heuristics."""
-
-    return len(re.findall(r"\S+", text))
-
-
-def _last_words(text: str, count: int) -> str:
-    """Return the overlap tail used when splitting oversized prose."""
-
-    words = re.findall(r"\S+", text)
-    return " ".join(words[-count:])
-
-
-def _slug(value: str) -> str:
-    """Create stable lowercase identifiers for document and parent IDs."""
-
-    slug = re.sub(r"[^a-zA-Z0-9]+", "_", value.lower()).strip("_")
-    return slug or "chunk"
-
-
-def _xml_attr(value: str) -> str:
-    """Escape SOURCE wrapper attributes while leaving markdown body text verbatim."""
-
-    return escape(value, quote=True)
+    _attach_relationships(chunks)
+    return chunks
