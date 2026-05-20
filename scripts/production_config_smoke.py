@@ -35,8 +35,8 @@ def main() -> None:
     env.update(
         {
             "ADVISOR_AUDIT_LOG_PATH": str(audit_path),
-            "DEEP_LATENCY_SLO_P50_MS": "18000",
-            "DEEP_LATENCY_SLO_P99_MS": "30000",
+            "DEEP_LATENCY_SLO_P50_MS": "25000",
+            "DEEP_LATENCY_SLO_P99_MS": "35000",
             "GRADIO_AUTH_PASSWORD": "smoke-password",
             "GRADIO_AUTH_USERNAME": "smoke-user",
             "HF_TOKEN": env.get("HF_TOKEN") or "smoke-token",

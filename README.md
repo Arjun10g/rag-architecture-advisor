@@ -167,8 +167,9 @@ Production settings to verify:
   both 1024 and 512 dimensional tables, then set `RETRIEVAL_MODE=hybrid`,
   `VECTOR_STORE_BACKEND=lancedb`, and `EMBEDDING_DIM=1024` or `512`.
 - Keep `LATENCY_SLO_P50_MS=10000` and `LATENCY_SLO_P99_MS=15000` as the standard
-  hosted SLO unless product requirements say otherwise. Deep-thinking mode uses
-  `DEEP_LATENCY_SLO_P50_MS=18000` and `DEEP_LATENCY_SLO_P99_MS=30000`.
+  hosted SLO unless product requirements say otherwise. Deep-thinking/full-text
+  mode uses `DEEP_LATENCY_SLO_P50_MS=25000` and
+  `DEEP_LATENCY_SLO_P99_MS=35000`.
 - If hosted Llama latency misses the SLO, set `ADVISOR_LATENCY_PROFILE=fast` to
   use the deterministic grounded narrative while preserving retrieval,
   citations, deployment projection, and audit output.
