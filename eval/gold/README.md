@@ -13,6 +13,9 @@ into prompts, few-shot examples, or the retrieval corpus.
   architecture documents, with additional routing/topology probes.
 - `v0_3_routing_stress.json` is a routing-only stress set for domain synonyms,
   mixed-domain wording, and unknown-domain elicitation.
+- `v0_4_answer_quality.json` checks the final synthesized answer shape:
+  topology, required architecture-decision fields, source coverage, and citation
+  coverage.
 
 ## Item Types
 
@@ -23,6 +26,8 @@ into prompts, few-shot examples, or the retrieval corpus.
   elicitation accuracy when expected.
 - `topology`: resolved requirement-vector inputs plus the expected catalog
   topology.
+- `answer`: full graph scenario plus expected topology, required decision areas,
+  required phrases inside those decisions, and required cited source families.
 
 ## Thresholds
 

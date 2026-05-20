@@ -13,6 +13,7 @@ if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from agents.intake_router import resolve_requirements
+from graph.build import build_graph
 from graph.state import ATTRIBUTES, AdvisorState, RequirementValue
 from retrieval.index import SearchResult
 from retrieval.service import retrieve
@@ -21,6 +22,7 @@ from synth.topology import select_topology
 
 DEFAULT_GOLD_PATH = Path(__file__).resolve().parent / "gold" / "v0_2_expanded.json"
 RetrieveFn = Callable[[str, str, int, dict[str, str] | None], list[SearchResult]]
+AnswerFn = Callable[[str], AdvisorState]
 
 
 @dataclass
@@ -335,29 +337,178 @@ def _score_topology(items: list[dict[str, Any]]) -> tuple[dict[str, float], list
     }, failures
 
 
+def _default_answer(scenario: str) -> AdvisorState:
+    return build_graph().invoke({"user_brief": scenario})
+
+
+def _decision_by_area(output: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        str(decision.get("area")): decision
+        for decision in output.get("architecture_decisions", [])
+        if decision.get("area")
+    }
+
+
+def _source_matches(source: dict[str, Any], expected: dict[str, Any]) -> bool:
+    path = str(source.get("source_path") or "").lower()
+    section = str(source.get("section") or "").lower()
+    used_by = {str(agent).lower() for agent in source.get("used_by") or []}
+
+    if expected.get("used_by") and str(expected["used_by"]).lower() not in used_by:
+        return False
+    if expected.get("path_contains") and str(expected["path_contains"]).lower() not in path:
+        return False
+    for needle in expected.get("section_contains") or []:
+        if str(needle).lower() not in section:
+            return False
+    return True
+
+
+def _score_answer_item(
+    item: dict[str, Any],
+    answer_fn: AnswerFn,
+) -> tuple[dict[str, float], dict[str, int], dict[str, Any] | None]:
+    started = time.perf_counter()
+    state = answer_fn(item["scenario"])
+    latency_ms = (time.perf_counter() - started) * 1000.0
+    output = state.draft_output or {}
+    decisions = output.get("architecture_decisions", [])
+    decisions_by_area = _decision_by_area(output)
+    sources = output.get("sources", [])
+
+    expected_topology = item.get("expected_topology")
+    actual_topology = (output.get("topology") or {}).get("key")
+    topology_score = float(not expected_topology or actual_topology == expected_topology)
+
+    required_areas = item.get("required_decision_areas") or []
+    area_hits = [area for area in required_areas if area in decisions_by_area]
+    area_recall = len(area_hits) / len(required_areas) if required_areas else 1.0
+
+    phrase_checks = item.get("required_decision_phrases") or []
+    phrase_hits = []
+    missing_phrases = []
+    for check in phrase_checks:
+        area = check["area"]
+        decision = decisions_by_area.get(area, {})
+        text = f"{decision.get('choice', '')} {decision.get('rationale', '')}".lower()
+        missing = [
+            phrase for phrase in check.get("contains", []) if str(phrase).lower() not in text
+        ]
+        if missing:
+            missing_phrases.append({"area": area, "missing": missing})
+        else:
+            phrase_hits.append(area)
+    phrase_recall = len(phrase_hits) / len(phrase_checks) if phrase_checks else 1.0
+
+    required_sources = item.get("required_sources") or []
+    source_hits = [
+        expected
+        for expected in required_sources
+        if any(_source_matches(source, expected) for source in sources)
+    ]
+    source_recall = len(source_hits) / len(required_sources) if required_sources else 1.0
+
+    cited_decisions = [decision for decision in decisions if decision.get("source_ids")]
+    citation_coverage = len(cited_decisions) / len(decisions) if decisions else 0.0
+    min_citation_coverage = float(item.get("min_citation_coverage", 1.0))
+
+    failure = None
+    if (
+        topology_score < 1.0
+        or area_recall < 1.0
+        or phrase_recall < 1.0
+        or source_recall < 1.0
+        or citation_coverage < min_citation_coverage
+    ):
+        failure = {
+            "axis": "answer",
+            "id": item["id"],
+            "expected_topology": expected_topology,
+            "actual_topology": actual_topology,
+            "missing_decision_areas": sorted(set(required_areas) - set(area_hits)),
+            "missing_decision_phrases": missing_phrases,
+            "source_recall": source_recall,
+            "citation_coverage": citation_coverage,
+        }
+
+    return (
+        {
+            "topology": topology_score,
+            "decision_area_recall": area_recall,
+            "decision_phrase_recall": phrase_recall,
+            "source_recall": source_recall,
+            "citation_coverage": citation_coverage,
+            "latency_ms": latency_ms,
+        },
+        {
+            "answer_decisions_total": len(decisions),
+            "answer_decisions_cited": len(cited_decisions),
+        },
+        failure,
+    )
+
+
+def _score_answers(
+    items: list[dict[str, Any]],
+    answer_fn: AnswerFn | None = None,
+) -> tuple[dict[str, float], dict[str, int], list[dict[str, Any]]]:
+    scores = []
+    counts = {"answer_decisions_total": 0, "answer_decisions_cited": 0}
+    failures = []
+    scorer = answer_fn or _default_answer
+    for item in items:
+        item_scores, item_counts, failure = _score_answer_item(item, scorer)
+        scores.append(item_scores)
+        for key, value in item_counts.items():
+            counts[key] += value
+        if failure:
+            failures.append(failure)
+
+    metrics = {
+        "answer_topology_accuracy": _mean([score["topology"] for score in scores]),
+        "answer_decision_area_recall": _mean(
+            [score["decision_area_recall"] for score in scores]
+        ),
+        "answer_decision_phrase_recall": _mean(
+            [score["decision_phrase_recall"] for score in scores]
+        ),
+        "answer_source_recall": _mean([score["source_recall"] for score in scores]),
+        "answer_citation_coverage": _mean([score["citation_coverage"] for score in scores]),
+        **_latency_metrics("answer", [score["latency_ms"] for score in scores]),
+    }
+    return metrics, counts, failures
+
+
 def run_eval(
     gold_path: str | Path = DEFAULT_GOLD_PATH,
     retrieve_fn: RetrieveFn | None = None,
+    answer_fn: AnswerFn | None = None,
 ) -> EvalReport:
     gold = _load_gold(gold_path)
+    answer_items = gold.get("answer", [])
     retrieval_metrics, retrieval_failures = _score_retrieval(
         gold.get("retrieval", []), retrieve_fn or _default_retrieve
     )
     routing_metrics, routing_counts, routing_failures = _score_routing(gold.get("routing", []))
     topology_metrics, topology_failures = _score_topology(gold.get("topology", []))
+    answer_metrics, answer_counts, answer_failures = _score_answers(answer_items, answer_fn)
 
     metrics = {
         **retrieval_metrics,
         **routing_metrics,
         **topology_metrics,
     }
+    if answer_items:
+        metrics.update(answer_metrics)
     counts = {
         "retrieval_items": len(gold.get("retrieval", [])),
         "routing_items": len(gold.get("routing", [])),
         "topology_items": len(gold.get("topology", [])),
+        "answer_items": len(answer_items),
         **routing_counts,
+        **answer_counts,
     }
-    failures = retrieval_failures + routing_failures + topology_failures
+    failures = retrieval_failures + routing_failures + topology_failures + answer_failures
     return EvalReport(version=gold["version"], metrics=metrics, counts=counts, failures=failures)
 
 

@@ -1,0 +1,101 @@
+{
+  "version": "gold_v0_4_answer_quality",
+  "created": "2026-05-20",
+  "description": "Answer-level deterministic checks for evidence-aware synthesis. These items verify that the graph emits structured architecture decisions with citations, not only retrieved source lists.",
+  "thresholds": {
+    "answer_topology_accuracy": 1.0,
+    "answer_decision_area_recall": 1.0,
+    "answer_decision_phrase_recall": 1.0,
+    "answer_source_recall": 1.0,
+    "answer_citation_coverage": 1.0
+  },
+  "answer": [
+    {
+      "id": "answer_technical_docs",
+      "scenario": "Build an internal API docs assistant over fast-moving SDK docs with strict citations, mixed markdown and code, and high exact-match terminology needs.",
+      "expected_topology": "two_stage_hybrid_rerank",
+      "required_decision_areas": [
+        "retrieval_strategy",
+        "reranking",
+        "embedding_dimension",
+        "vector_database",
+        "deployment",
+        "security_governance",
+        "evaluation"
+      ],
+      "required_decision_phrases": [
+        {"area": "retrieval_strategy", "contains": ["hybrid", "reciprocal rank fusion"]},
+        {"area": "reranking", "contains": ["reranking", "candidate fanout"]},
+        {"area": "embedding_dimension", "contains": ["1024", "512"]},
+        {"area": "vector_database", "contains": ["managed vector index", "blue-green"]},
+        {"area": "security_governance", "contains": ["acl-aware", "audit lineage"]},
+        {"area": "evaluation", "contains": ["p50", "p95", "p99"]}
+      ],
+      "required_sources": [
+        {"used_by": "retrieval", "path_contains": "neural_search_matching_pipelines"},
+        {"used_by": "security", "path_contains": "rag_security_governance", "section_contains": ["retrieval"]},
+        {"used_by": "cloud_iac", "path_contains": "matching_retrieval_reranking_cloud_mapping"},
+        {"used_by": "evaluation", "path_contains": "chunking_parsing_rag_evaluation"}
+      ],
+      "min_citation_coverage": 1.0
+    },
+    {
+      "id": "answer_banking_controls",
+      "scenario": "Build a banking compliance assistant over customer policy, PCI controls, KYC procedures, and transaction runbooks where mistakes are costly and every answer needs auditability.",
+      "expected_topology": "two_stage_hybrid_rerank",
+      "required_decision_areas": [
+        "retrieval_strategy",
+        "reranking",
+        "embedding_dimension",
+        "vector_database",
+        "deployment",
+        "security_governance",
+        "evaluation"
+      ],
+      "required_decision_phrases": [
+        {"area": "retrieval_strategy", "contains": ["hybrid", "reciprocal rank fusion"]},
+        {"area": "reranking", "contains": ["reranking", "candidate fanout"]},
+        {"area": "embedding_dimension", "contains": ["1024", "512"]},
+        {"area": "vector_database", "contains": ["managed vector index", "blue-green"]},
+        {"area": "security_governance", "contains": ["acl-aware", "audit lineage"]},
+        {"area": "evaluation", "contains": ["p50", "p95", "p99"]}
+      ],
+      "required_sources": [
+        {"used_by": "retrieval", "path_contains": "neural_search_matching_pipelines"},
+        {"used_by": "security", "path_contains": "rag_security_governance", "section_contains": ["retrieval"]},
+        {"used_by": "cloud_iac", "path_contains": "matching_retrieval_reranking_cloud_mapping"},
+        {"used_by": "evaluation", "path_contains": "chunking_parsing_rag_evaluation"}
+      ],
+      "min_citation_coverage": 1.0
+    },
+    {
+      "id": "answer_mental_health_literature",
+      "scenario": "Build a mental health therapy literature assistant for clinicians reviewing CBT studies and narrative research notes, with citation support and lower exact-match pressure than API documentation.",
+      "expected_topology": "two_stage_dense_rerank",
+      "required_decision_areas": [
+        "retrieval_strategy",
+        "reranking",
+        "embedding_dimension",
+        "vector_database",
+        "deployment",
+        "security_governance",
+        "evaluation"
+      ],
+      "required_decision_phrases": [
+        {"area": "retrieval_strategy", "contains": ["dense", "lexical fallback"]},
+        {"area": "reranking", "contains": ["reranking", "candidate fanout"]},
+        {"area": "embedding_dimension", "contains": ["1024", "512"]},
+        {"area": "vector_database", "contains": ["managed vector index", "blue-green"]},
+        {"area": "security_governance", "contains": ["acl-aware", "audit lineage"]},
+        {"area": "evaluation", "contains": ["p50", "p95", "p99"]}
+      ],
+      "required_sources": [
+        {"used_by": "retrieval", "path_contains": "neural_search_matching_pipelines"},
+        {"used_by": "security", "path_contains": "rag_security_governance", "section_contains": ["retrieval"]},
+        {"used_by": "cloud_iac", "path_contains": "matching_retrieval_reranking_cloud_mapping"},
+        {"used_by": "evaluation", "path_contains": "chunking_parsing_rag_evaluation"}
+      ],
+      "min_citation_coverage": 1.0
+    }
+  ]
+}

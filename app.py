@@ -27,6 +27,7 @@ def _format_output(state: AdvisorState) -> str:
     topology = output.get("topology", {})
     panel = output.get("panel", {})
     terraform = output.get("terraform", "")
+    architecture_decisions = output.get("architecture_decisions") or []
     sources = output.get("sources") or []
 
     lines = [
@@ -45,6 +46,19 @@ def _format_output(state: AdvisorState) -> str:
     lines.extend(["", "## Weaknesses"])
     for item in panel.get("weaknesses", []):
         lines.append(f"- {item}")
+
+    if architecture_decisions:
+        lines.extend(["", "## Architecture Decisions"])
+        for decision in architecture_decisions:
+            area = str(decision.get("area") or "decision").replace("_", " ").title()
+            choice = decision.get("choice") or "Pending"
+            source_ids = decision.get("source_ids") or []
+            lines.append(f"- **{area}:** {choice}")
+            if decision.get("rationale"):
+                lines.append(f"  {decision['rationale']}")
+            if source_ids:
+                citations = " ".join(f"`{source_id}`" for source_id in source_ids[:3])
+                lines.append(f"  Sources: {citations}")
 
     if terraform:
         lines.extend(["", "## Terraform Sketch", "```hcl", terraform.strip(), "```"])
