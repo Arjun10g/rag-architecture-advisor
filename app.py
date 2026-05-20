@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any
 
 try:
@@ -32,6 +33,21 @@ EXAMPLE_BRIEFS = [
 
 DetailResponse = tuple[str, str, list[list[Any]], str, str, str, dict[str, Any]]
 ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
+
+
+def _env_bool(key: str, default: bool = False) -> bool:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return value.lower().strip() in {"1", "true", "yes", "on"}
+
+
+def _auth_credentials() -> tuple[str, str] | None:
+    username = os.getenv("GRADIO_AUTH_USERNAME", "").strip()
+    password = os.getenv("GRADIO_AUTH_PASSWORD", "").strip()
+    if bool(username) != bool(password):
+        raise RuntimeError("Set both GRADIO_AUTH_USERNAME and GRADIO_AUTH_PASSWORD, or neither.")
+    return (username, password) if username and password else None
 
 
 def _evidence_refs_text(refs: list[str]) -> str:
@@ -495,6 +511,7 @@ def advise_api(
     elicitation_answers: str | None = None,
     conflict_resolution: str | None = None,
 ) -> dict[str, Any]:
+    started = time.perf_counter()
     (
         recommendation,
         architecture_decisions,
@@ -518,6 +535,9 @@ def advise_api(
             for attr in raw_trace.get("pending_elicitation", [])
         ],
         "generation": _public_generation_status(raw_trace),
+        "runtime": {
+            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
     }
 
 
@@ -526,6 +546,7 @@ def build_demo():
         raise RuntimeError("gradio is not installed. Install requirements.txt to run the app.")
 
     with gr.Blocks(title="RAG Architecture Advisor") as demo:
+        show_raw_trace = _env_bool("SHOW_RAW_TRACE", False)
         gr.Markdown("# RAG Architecture Advisor")
         with gr.Row():
             brief = gr.Textbox(label="Brief", lines=8, placeholder="Describe the RAG use case...")
@@ -563,8 +584,11 @@ def build_demo():
                 terraform = gr.Textbox(label="Terraform Sketch", lines=18)
             with gr.Tab("Trace"):
                 trace = gr.Markdown(label="Advisor Reasoning Trace")
-            with gr.Tab("Raw JSON"):
-                raw_trace = gr.JSON(label="Raw Trace")
+            if show_raw_trace:
+                with gr.Tab("Raw JSON"):
+                    raw_trace = gr.JSON(label="Raw Trace")
+            else:
+                raw_trace = gr.JSON(label="Raw Trace", visible=False)
         public_api_payload = gr.JSON(label="Public API Response", visible=False)
         public_api_trigger = gr.Button("Public API", visible=False)
 
@@ -607,4 +631,5 @@ if __name__ == "__main__":
             server_name=os.getenv("GRADIO_SERVER_NAME", "0.0.0.0"),
             server_port=int(os.getenv("GRADIO_SERVER_PORT", "7860")),
             share=os.getenv("GRADIO_SHARE", "false").lower() == "true",
+            auth=_auth_credentials(),
         )

@@ -62,6 +62,7 @@ python3 scripts/vector_index_manifest_smoke.py
 python3 scripts/llm_provider_smoke.py
 python3 scripts/app_formatting_smoke.py
 python3 scripts/audit_log_smoke.py
+python3 scripts/production_readiness_check.py --profile demo
 python3 eval/harness.py --gate
 python3 eval/harness.py --gold eval/gold/v0_4_answer_quality.json --gate
 python3 eval/harness.py --gold eval/gold/v0_5_panel_quality.json --gate
@@ -115,12 +116,35 @@ Terraform sketch, public reasoning trace, and generation status without the raw
 graph state:
 
 ```bash
-python3 scripts/api_output_probe.py --url http://127.0.0.1:7860
+python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --runs 3
 ```
 
 The detailed UI/debug response includes an `audit_record` in raw JSON. Set
 `ADVISOR_AUDIT_LOG_PATH=/path/to/advisor-audit.jsonl` to persist those records in
 deployment.
+
+## Production Readiness
+
+The public API and deployed Space are suitable for controlled beta once secrets
+are configured. Before treating an environment as production, run:
+
+```bash
+python3 scripts/production_readiness_check.py --profile production
+python3 scripts/api_output_probe.py --url https://<space-or-host>/ --runs 5
+python3 scripts/hf_generation_probe.py
+```
+
+Production settings to verify:
+
+- Set `HF_TOKEN`, `LLM_PROVIDER=hf`, and `HF_INFERENCE_MODEL` as deployment
+  secrets/variables. The probes never print token values.
+- Set `GRADIO_AUTH_USERNAME` and `GRADIO_AUTH_PASSWORD`, or put the app behind an
+  authenticated gateway with rate limits.
+- Keep `SHOW_RAW_TRACE=false` so debug JSON is hidden in the UI. The public
+  `/advise` endpoint never returns the raw graph state.
+- Set `ADVISOR_AUDIT_LOG_PATH` to a persistent log sink or mounted volume.
+- For dense/hybrid production retrieval, build and mount the LanceDB index with
+  both 1024 and 512 dimensional tables, then set `VECTOR_STORE_BACKEND=lancedb`.
 
 ## Retrieval Modes
 

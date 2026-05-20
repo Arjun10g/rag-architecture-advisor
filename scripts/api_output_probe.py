@@ -4,15 +4,8 @@ import argparse
 import json
 import re
 import sys
+import time
 from typing import Any
-
-try:
-    from gradio_client import Client
-except ImportError as exc:  # pragma: no cover
-    raise SystemExit(
-        "gradio_client is required. Install requirements.txt before running this probe."
-    ) from exc
-
 
 DEFAULT_BRIEF = (
     "Build an internal API docs assistant over fast-moving SDK docs with strict "
@@ -77,6 +70,13 @@ def _find_forbidden_keys(value: Any, path: str = "$") -> list[str]:
 
 
 def _predict(args: argparse.Namespace) -> dict[str, Any]:
+    try:
+        from gradio_client import Client
+    except ImportError as exc:  # pragma: no cover
+        raise SystemExit(
+            "gradio_client is required. Install requirements.txt before running this probe."
+        ) from exc
+
     client = Client(args.url)
     result = client.predict(
         user_brief=args.brief,
@@ -86,6 +86,28 @@ def _predict(args: argparse.Namespace) -> dict[str, Any]:
     )
     _require(isinstance(result, dict), "public API should return one JSON object")
     return result
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def _latency_summary(values: list[float]) -> dict[str, float]:
+    return {
+        "p50": round(_percentile(values, 0.50), 2),
+        "p95": round(_percentile(values, 0.95), 2),
+        "p99": round(_percentile(values, 0.99), 2),
+        "max": round(max(values) if values else 0.0, 2),
+    }
 
 
 def _validate_chunks(chunks: Any) -> list[dict[str, Any]]:
@@ -151,14 +173,24 @@ def main() -> None:
     parser.add_argument("--brief", default=DEFAULT_BRIEF)
     parser.add_argument("--elicitation-answers", default="")
     parser.add_argument("--conflict-resolution", default="")
+    parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--show-preview", action="store_true")
     args = parser.parse_args()
+    _require(args.runs >= 1, "--runs must be at least 1")
 
-    payload = _predict(args)
+    payload: dict[str, Any] | None = None
+    latencies = []
+    for _ in range(args.runs):
+        started = time.perf_counter()
+        payload = _predict(args)
+        latencies.append((time.perf_counter() - started) * 1000)
+        _validate_public_payload(payload)
+    assert payload is not None
     summary = {
         "url": args.url,
         "endpoint": args.endpoint,
         **_validate_public_payload(payload),
+        "client_latency_ms": _latency_summary(latencies),
     }
     if args.show_preview:
         summary["recommendation_preview"] = str(payload.get("recommendation") or "")[:800]
