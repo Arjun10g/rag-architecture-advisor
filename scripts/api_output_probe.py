@@ -197,6 +197,10 @@ def _validate_chunks(chunks: Any) -> list[dict[str, Any]]:
             not reasoning_chunk.startswith(("Generated:", "```")),
             f"reasoning chunk {index} is not a substantive literature chunk",
         )
+        _require(
+            not (reasoning_chunk.count("|") >= 4 or "|---" in reasoning_chunk),
+            f"reasoning chunk {index} leaked raw markdown table text",
+        )
         normalized.append(chunk)
     return normalized
 
@@ -262,7 +266,7 @@ def _validate_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     _require("Agentic Reasoning Trace" in recommendation, "recommendation is missing agentic reasoning")
     _require("Retrieval Strategy" in decisions, "architecture decisions are missing retrieval reasoning")
     _require("Accepted Tradeoff" in decisions, "architecture decisions are missing tradeoffs")
-    _require("Reasoning Chunks" in decisions, "architecture decisions are missing evidence chunks")
+    _require("Evidence Summaries" in decisions, "architecture decisions are missing evidence summaries")
     _require("Advisor Reasoning Trace" in trace, "trace is missing the public reasoning heading")
     _require("Read the literature chunks" in trace, "trace does not describe literature-grounding")
     _require("Deployment Projection" in deployment, "deployment projection is missing")

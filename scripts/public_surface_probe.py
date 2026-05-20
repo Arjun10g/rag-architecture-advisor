@@ -66,6 +66,7 @@ def main() -> None:
                             "alert_log_configured",
                             "usage_budget_configured",
                             "deep_thinking_enabled",
+                            "public_deep_thinking_controls_ok",
                             "anonymous_controls_ok",
                             "raw_trace_hidden",
                         )
@@ -118,11 +119,10 @@ def _validate_health(payload: Any) -> None:
                 "request_log_configured",
                 "alert_log_configured",
                 "usage_budget_configured",
+                "public_deep_thinking_controls_ok",
                 "anonymous_controls_ok",
             }
         )
-        if checks.get("deep_thinking_enabled"):
-            raise AssertionError("anonymous public mode should disable deep thinking")
     missing = [key for key in required if not checks.get(key)]
     if missing:
         raise AssertionError(f"health checks failed: {missing}")

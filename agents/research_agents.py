@@ -14,6 +14,7 @@ from typing import Annotated, Callable, TypedDict
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from agents.snippets import display_snippet
 from graph.state import (
     AdvisorState,
     ResearchApproachSummary,
@@ -404,23 +405,22 @@ def _run_research_agent(
 def _source_ref(result: SearchResult) -> SourceRef:
     chunk = result.chunk
     section = " > ".join(chunk.metadata.get("section_path") or [])
+    element_type = str(chunk.metadata.get("element_type") or "")
     return SourceRef(
         source_id=chunk.chunk_id,
         title=chunk.title,
         section=section,
         source_path=str(chunk.metadata.get("source_path") or chunk.source_path),
         score=round(result.score, 6),
-        snippet=_snippet(chunk.text_original),
-        element_type=str(chunk.metadata.get("element_type") or ""),
+        snippet=display_snippet(
+            chunk.text_original,
+            limit=220,
+            section=section,
+            element_type=element_type,
+        ),
+        element_type=element_type,
         url=chunk.metadata.get("source_url"),
     )
-
-
-def _snippet(text: str, limit: int = 220) -> str:
-    compact = " ".join(line.strip() for line in text.splitlines() if line.strip())
-    if len(compact) <= limit:
-        return compact
-    return f"{compact[: limit - 3].rstrip()}..."
 
 
 def _links_from_result(agent: str, result: SearchResult) -> list[ResearchLink]:

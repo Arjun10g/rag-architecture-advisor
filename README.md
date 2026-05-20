@@ -166,15 +166,16 @@ python3 scripts/hf_generation_probe.py
 python3 scripts/qdrant_blue_green_promote.py --target-table rag_advisor_chunks --alias-table rag_advisor_chunks_live --dry-run
 ```
 
-Run the deep-thinking probe only in authenticated or internal profiles where
-`DEEP_THINKING_ENABLED=true`.
+Run the deep-thinking probe when `DEEP_THINKING_ENABLED=true`; keep a separate
+low public quota because it fetches and summarizes additional references.
 
 Production settings to verify:
 
 - Set `HF_TOKEN`, `LLM_PROVIDER=hf`, and `HF_INFERENCE_MODEL` as deployment
   secrets/variables. The probes never print token values.
-- For public anonymous access, set `PUBLIC_ACCESS_MODE=anonymous`,
-  `ALLOW_ANONYMOUS_PUBLIC=true`, and `DEEP_THINKING_ENABLED=false`. For private
+- For public anonymous access, set `PUBLIC_ACCESS_MODE=anonymous` and
+  `ALLOW_ANONYMOUS_PUBLIC=true`. `DEEP_THINKING_ENABLED=true` is allowed only
+  with lower deep-mode rate limits and daily/monthly deep budgets. For private
   beta, use `PUBLIC_ACCESS_MODE=authenticated` with `GRADIO_AUTH_USERNAME` and
   `GRADIO_AUTH_PASSWORD`, or `PUBLIC_ACCESS_MODE=gateway` only when a real
   authenticated gateway is in front of the app.
@@ -239,7 +240,7 @@ Anonymous public launch mode used by the hosted Space:
 ```bash
 PUBLIC_ACCESS_MODE=anonymous
 ALLOW_ANONYMOUS_PUBLIC=true
-DEEP_THINKING_ENABLED=false
+DEEP_THINKING_ENABLED=true
 METRICS_AUTH_TOKEN=<set as secret>
 RATE_LIMIT_ENABLED=true
 RATE_LIMIT_PER_IDENTITY=true
@@ -249,11 +250,15 @@ RATE_LIMIT_MAX_REQUESTS=8
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_GLOBAL_MAX_REQUESTS=60
 RATE_LIMIT_GLOBAL_WINDOW_SECONDS=60
+RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS=1
+RATE_LIMIT_ADVISOR_DEEP_WINDOW_SECONDS=600
 ADVISOR_REQUEST_LOG_PATH=/data/advisor-requests.jsonl
 ADVISOR_ALERT_LOG_PATH=/data/advisor-alerts.jsonl
 ADVISOR_USAGE_COUNTER_PATH=/data/advisor-usage.json
 DAILY_REQUEST_BUDGET=250
 MONTHLY_REQUEST_BUDGET=3000
+DAILY_DEEP_REQUEST_BUDGET=20
+MONTHLY_DEEP_REQUEST_BUDGET=200
 REQUEST_ALERT_MAX_REQUESTS=50
 REQUEST_ALERT_LATENCY_MS=20000
 ADVISOR_CONCURRENCY_LIMIT=3

@@ -412,6 +412,24 @@ def _usage_budget_configured() -> bool:
     )
 
 
+def _public_deep_thinking_controls_ok() -> bool:
+    if not _env_bool("DEEP_THINKING_ENABLED", True):
+        return True
+    standard_limit = _env_int(
+        "RATE_LIMIT_ADVISOR_MAX_REQUESTS",
+        _env_int("RATE_LIMIT_MAX_REQUESTS", 30),
+    )
+    deep_limit = _env_int("RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS", 0)
+    daily_deep = _env_int("DAILY_DEEP_REQUEST_BUDGET", 0)
+    monthly_deep = _env_int("MONTHLY_DEEP_REQUEST_BUDGET", 0)
+    max_full_text_links = _env_int("DEEP_RESEARCH_MAX_FULL_TEXT_LINKS", 4)
+    return (
+        0 < deep_limit <= max(1, standard_limit)
+        and 0 < daily_deep <= monthly_deep
+        and 0 <= max_full_text_links <= 4
+    )
+
+
 def _enforce_usage_budget(deep_thinking: bool) -> None:
     path = _json_log_path("ADVISOR_USAGE_COUNTER_PATH")
     limits = _usage_budget_limits(deep_thinking)
@@ -612,6 +630,7 @@ def health_api() -> dict[str, Any]:
     alert_log_configured = bool(_json_log_path("ADVISOR_ALERT_LOG_PATH"))
     usage_budget_configured = _usage_budget_configured()
     deep_thinking_enabled = _env_bool("DEEP_THINKING_ENABLED", True)
+    public_deep_thinking_controls_ok = _public_deep_thinking_controls_ok()
     anonymous_controls_ok = (
         public_mode != "anonymous"
         or (
@@ -619,7 +638,7 @@ def health_api() -> dict[str, Any]:
             and request_log_configured
             and alert_log_configured
             and usage_budget_configured
-            and not deep_thinking_enabled
+            and public_deep_thinking_controls_ok
         )
     )
     checks = {
@@ -643,6 +662,7 @@ def health_api() -> dict[str, Any]:
         "alert_log_configured": alert_log_configured,
         "usage_budget_configured": usage_budget_configured,
         "deep_thinking_enabled": deep_thinking_enabled,
+        "public_deep_thinking_controls_ok": public_deep_thinking_controls_ok,
         "anonymous_controls_ok": anonymous_controls_ok,
         "raw_trace_hidden": not _env_bool("SHOW_RAW_TRACE", False),
     }
@@ -801,7 +821,7 @@ def _format_output(state: AdvisorState) -> str:
             if used_by:
                 lines.append(f"  Used by: {used_by}")
             if source.get("snippet"):
-                lines.append(f"  Reasoning chunk: {source['snippet']}")
+                lines.append(f"  Evidence summary: {source['snippet']}")
 
     return "\n".join(lines)
 
@@ -861,7 +881,7 @@ def _format_architecture_decisions(state: AdvisorState) -> str:
             lines.extend(["", "**Evidence:** " + _evidence_refs_text(evidence_refs)])
         evidence_chunks = decision.get("evidence_chunks") or []
         if evidence_chunks:
-            lines.extend(["", "**Reasoning Chunks:**"])
+            lines.extend(["", "**Evidence Summaries:**"])
             for chunk in evidence_chunks:
                 label = chunk.get("evidence_label") or "E?"
                 lines.append(
@@ -1066,7 +1086,7 @@ def _format_trace(state: AdvisorState) -> str:
             if used_by:
                 lines.append(f"  Used for: {used_by}")
             if snippet:
-                lines.append(f"  Chunk reasoning: {snippet}")
+                lines.append(f"  Evidence summary: {snippet}")
 
     if topology:
         lines.extend(["", "### 4. Selected the topology"])
@@ -1380,10 +1400,10 @@ def build_demo():
                 decisions = gr.Markdown(label="Architecture Decisions")
             with gr.Tab("Evidence"):
                 sources = gr.Dataframe(
-                    headers=["#", "Used By", "Evidence", "Section", "Reasoning Chunk"],
+                    headers=["#", "Used By", "Evidence", "Section", "Evidence Summary"],
                     datatype=["number", "str", "str", "str", "str"],
                     interactive=False,
-                    label="Reasoning Chunks",
+                    label="Evidence Summaries",
                 )
             with gr.Tab("Deployment"):
                 deployment = gr.Markdown(label="Deployment Projection")

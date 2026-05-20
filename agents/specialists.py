@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
-import re
 from typing import Callable
 
 from graph.edges import SPECIALIST_NAMES
 from graph.state import AdvisorState, Finding, SourceRef
+from agents.snippets import display_snippet
 from retrieval.index import SearchResult
 from retrieval.service import get_retriever, retrieve
 
@@ -17,7 +17,6 @@ FOCUS_QUERIES = {
     "cloud_iac": "embedding dimension lower higher storage recall quality vector search blue-green dimension changes managed vector options model endpoints observability",
     "evaluation": "RAG evaluation gold set retrieval metrics nDCG MRR citation latency percentiles CI",
 }
-RAW_CORPUS_PATH_RE = re.compile(r"\bcorpus/(?:[^\s`),;]+)?")
 
 
 RetrieveFn = Callable[[str, str, int, dict[str, str] | None], list[SearchResult]]
@@ -26,37 +25,22 @@ RetrieveFn = Callable[[str, str, int, dict[str, str] | None], list[SearchResult]
 def _source_ref(result: SearchResult) -> SourceRef:
     chunk = result.chunk
     section = " > ".join(chunk.metadata.get("section_path") or [])
+    element_type = str(chunk.metadata.get("element_type") or "")
     return SourceRef(
         source_id=chunk.chunk_id,
         title=chunk.title,
         section=section,
         source_path=str(chunk.metadata.get("source_path") or chunk.source_path),
         score=round(result.score, 6),
-        element_type=str(chunk.metadata.get("element_type") or ""),
-        snippet=_snippet(chunk.text_original),
+        element_type=element_type,
+        snippet=display_snippet(
+            chunk.text_original,
+            limit=220,
+            section=section,
+            element_type=element_type,
+        ),
         url=chunk.metadata.get("source_url"),
     )
-
-
-def _snippet(text: str, limit: int = 240) -> str:
-    lines = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped in {"---", "```", "```text", "```python", "```json", "```yaml"}:
-            continue
-        if stripped.startswith("```"):
-            continue
-        if stripped.startswith("#"):
-            continue
-        lines.append(stripped)
-    compact = _sanitize_snippet(" ".join(lines).strip() or " ".join(text.split()))
-    if len(compact) <= limit:
-        return compact
-    return f"{compact[: limit - 3].rstrip()}..."
-
-
-def _sanitize_snippet(text: str) -> str:
-    return RAW_CORPUS_PATH_RE.sub("the curated corpus", text)
 
 
 def _run_specialist(

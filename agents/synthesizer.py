@@ -120,6 +120,8 @@ def _evidence_quality(source: dict) -> int:
 
     if element_type in LOW_VALUE_ELEMENT_TYPES:
         score -= 9
+    if element_type == "table":
+        score -= 4
     if any(source_path.endswith(suffix) for suffix in LOW_VALUE_PATH_SUFFIXES):
         score -= 5
     if any(term in section for term in LOW_VALUE_SECTION_TERMS):

@@ -32,6 +32,7 @@ REQUIRED_FILES = (
     "README.md",
     ".env.example",
     "agents/research_agents.py",
+    "agents/snippets.py",
     "corpus/manifest.yaml",
     "scripts/api_output_probe.py",
     "scripts/qdrant_cloud_bootstrap.py",
@@ -227,12 +228,27 @@ def _usage_budget_ok() -> tuple[bool, str]:
     return True, f"daily={daily} monthly={monthly}"
 
 
+def _public_deep_thinking_controls_ok() -> tuple[bool, str]:
+    if not _deep_thinking_enabled():
+        return True, "deep thinking disabled"
+    standard_limit = _env_int("RATE_LIMIT_ADVISOR_MAX_REQUESTS", _env_int("RATE_LIMIT_MAX_REQUESTS", 30))
+    deep_limit = _env_int("RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS", 0)
+    daily_deep = _env_int("DAILY_DEEP_REQUEST_BUDGET", 0)
+    monthly_deep = _env_int("MONTHLY_DEEP_REQUEST_BUDGET", 0)
+    max_full_text_links = _env_int("DEEP_RESEARCH_MAX_FULL_TEXT_LINKS", 4)
+    if not (0 < deep_limit <= max(1, standard_limit)):
+        return False, "deep-thinking rate limit must be positive and no higher than standard"
+    if not (0 < daily_deep <= monthly_deep):
+        return False, "deep-thinking daily/monthly budgets must be positive"
+    if not (0 <= max_full_text_links <= 4):
+        return False, "anonymous deep-thinking full-text links must be <= 4"
+    return True, f"deep_limit={deep_limit} daily_deep={daily_deep}"
+
+
 def _anonymous_controls_ok() -> tuple[bool, str]:
     mode = os.getenv("PUBLIC_ACCESS_MODE", "private").strip().lower()
     if mode != "anonymous":
         return True, "not anonymous mode"
-    if _deep_thinking_enabled():
-        return False, "anonymous mode must set DEEP_THINKING_ENABLED=false"
     logging_ok, logging_detail = _request_logging_ok()
     if not logging_ok:
         return False, logging_detail
@@ -242,6 +258,9 @@ def _anonymous_controls_ok() -> tuple[bool, str]:
     controls_ok, controls_detail = _cost_controls_ok()
     if not controls_ok:
         return False, controls_detail
+    deep_ok, deep_detail = _public_deep_thinking_controls_ok()
+    if not deep_ok:
+        return False, deep_detail
     return True, "anonymous controls hardened"
 
 

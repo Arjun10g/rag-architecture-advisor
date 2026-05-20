@@ -33,7 +33,7 @@ def main() -> None:
         raise AssertionError("recommendation tab is missing selected topology")
     if "Retrieval Strategy" not in decisions:
         raise AssertionError("architecture tab is missing retrieval decision")
-    if "Accepted Tradeoff" not in decisions or "Reasoning Chunks" not in decisions:
+    if "Accepted Tradeoff" not in decisions or "Evidence Summaries" not in decisions:
         raise AssertionError("architecture tab is missing detailed reasoning")
     if not sources or len(sources[0]) != 5:
         raise AssertionError("source table rows are malformed")
@@ -43,6 +43,8 @@ def main() -> None:
         raise AssertionError("source table should not expose raw chunk IDs")
     if any(str(row[-1]).startswith(("Generated:", "```")) for row in sources):
         raise AssertionError("source table should prefer substantive reasoning chunks")
+    if any(str(row[-1]).count("|") >= 4 or "|---" in str(row[-1]) for row in sources):
+        raise AssertionError("source table should show cleaned summaries, not raw markdown tables")
     if "flowchart LR" not in deployment or "Deployment Projection" not in deployment or "Vector database" not in deployment:
         raise AssertionError("deployment tab is missing projection details")
     if "terraform" not in terraform:
