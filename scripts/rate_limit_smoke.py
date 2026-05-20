@@ -9,6 +9,7 @@ os.environ["LLM_PROVIDER"] = "disabled"
 os.environ["PREWARM_RETRIEVER"] = "false"
 os.environ["RETRIEVAL_MODE"] = "lexical"
 os.environ["VECTOR_STORE_BACKEND"] = "memory"
+os.environ["ADVISOR_USAGE_COUNTER_PATH"] = ""
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -34,6 +35,7 @@ def main() -> None:
     _set_env("ADVISOR_LATENCY_PROFILE", "quality", previous)
     _set_env("LLM_PROVIDER", "disabled", previous)
     _set_env("RATE_LIMIT_ENABLED", "true", previous)
+    _set_env("RATE_LIMIT_PER_IDENTITY", "true", previous)
     _set_env("RATE_LIMIT_MAX_REQUESTS", "1", previous)
     _set_env("RATE_LIMIT_WINDOW_SECONDS", "60", previous)
     try:

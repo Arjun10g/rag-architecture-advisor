@@ -11,6 +11,7 @@ os.environ["RETRIEVAL_MODE"] = "lexical"
 os.environ["VECTOR_STORE_BACKEND"] = "memory"
 os.environ["PREWARM_RETRIEVER"] = "false"
 os.environ["METRICS_AUTH_TOKEN"] = "smoke-token"
+os.environ["ADVISOR_USAGE_COUNTER_PATH"] = ""
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))

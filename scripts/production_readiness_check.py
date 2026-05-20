@@ -93,7 +93,11 @@ def _latency_slo_ok(prefix: str = "") -> tuple[bool, str]:
 
 
 def _audit_log_path_ok() -> tuple[bool, str]:
-    raw = os.getenv("ADVISOR_AUDIT_LOG_PATH", "").strip()
+    return _persistent_path_ok("ADVISOR_AUDIT_LOG_PATH")
+
+
+def _persistent_path_ok(key: str) -> tuple[bool, str]:
+    raw = os.getenv(key, "").strip()
     if not raw:
         return False, "missing"
     path = Path(raw).expanduser()
@@ -171,6 +175,8 @@ def _input_bounds_ok() -> tuple[bool, str]:
 def _cost_controls_ok() -> tuple[bool, str]:
     if not _env_bool("RATE_LIMIT_ENABLED") and not _env_bool("EXTERNAL_RATE_LIMITING"):
         return False, "rate limiting or external rate limiting is required"
+    if _env_bool("RATE_LIMIT_ENABLED") and not _env_bool("RATE_LIMIT_PER_IDENTITY"):
+        return False, "RATE_LIMIT_PER_IDENTITY=true is required for public traffic"
     standard_limit = _env_int("RATE_LIMIT_MAX_REQUESTS", 30)
     deep_limit = _env_int("RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS", standard_limit)
     if deep_limit > standard_limit:
@@ -178,6 +184,56 @@ def _cost_controls_ok() -> tuple[bool, str]:
     if os.getenv("DEEP_THINKING_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"} and deep_limit <= 0:
         return False, "deep-thinking limit must be positive when deep thinking is enabled"
     return True, f"standard_limit={standard_limit} deep_limit={deep_limit}"
+
+
+def _request_logging_ok() -> tuple[bool, str]:
+    request_ok, request_detail = _persistent_path_ok("ADVISOR_REQUEST_LOG_PATH")
+    alert_ok, alert_detail = _persistent_path_ok("ADVISOR_ALERT_LOG_PATH")
+    if not request_ok:
+        return False, f"request log {request_detail}"
+    if not alert_ok:
+        return False, f"alert log {alert_detail}"
+    spike_threshold = _env_int("REQUEST_ALERT_MAX_REQUESTS", 0)
+    latency_threshold = _env_int("REQUEST_ALERT_LATENCY_MS", 0)
+    if spike_threshold <= 0 or latency_threshold <= 0:
+        return False, "REQUEST_ALERT_MAX_REQUESTS and REQUEST_ALERT_LATENCY_MS must be positive"
+    return True, f"request_log=set alert_log=set spike_threshold={spike_threshold}"
+
+
+def _usage_budget_ok() -> tuple[bool, str]:
+    counter_ok, counter_detail = _persistent_path_ok("ADVISOR_USAGE_COUNTER_PATH")
+    if not counter_ok:
+        return False, f"usage counter {counter_detail}"
+    daily = _env_int("DAILY_REQUEST_BUDGET", 0)
+    monthly = _env_int("MONTHLY_REQUEST_BUDGET", 0)
+    if daily <= 0 or monthly <= 0:
+        return False, "DAILY_REQUEST_BUDGET and MONTHLY_REQUEST_BUDGET must be positive"
+    if daily > monthly:
+        return False, "DAILY_REQUEST_BUDGET cannot exceed MONTHLY_REQUEST_BUDGET"
+    if _env_bool("DEEP_THINKING_ENABLED"):
+        daily_deep = _env_int("DAILY_DEEP_REQUEST_BUDGET", 0)
+        monthly_deep = _env_int("MONTHLY_DEEP_REQUEST_BUDGET", 0)
+        if daily_deep <= 0 or monthly_deep <= 0:
+            return False, "deep budgets must be positive when deep thinking is enabled"
+    return True, f"daily={daily} monthly={monthly}"
+
+
+def _anonymous_controls_ok() -> tuple[bool, str]:
+    mode = os.getenv("PUBLIC_ACCESS_MODE", "private").strip().lower()
+    if mode != "anonymous":
+        return True, "not anonymous mode"
+    if _env_bool("DEEP_THINKING_ENABLED"):
+        return False, "anonymous mode must set DEEP_THINKING_ENABLED=false"
+    logging_ok, logging_detail = _request_logging_ok()
+    if not logging_ok:
+        return False, logging_detail
+    budget_ok, budget_detail = _usage_budget_ok()
+    if not budget_ok:
+        return False, budget_detail
+    controls_ok, controls_detail = _cost_controls_ok()
+    if not controls_ok:
+        return False, controls_detail
+    return True, "anonymous controls hardened"
 
 
 def _serving_capacity_ok() -> tuple[bool, str]:
@@ -365,17 +421,29 @@ def _validate_direct_public_api() -> tuple[bool, str]:
     previous = os.environ.get("LLM_PROVIDER")
     previous_rate_limit = os.environ.get("RATE_LIMIT_ENABLED")
     previous_retrieval_mode = os.environ.get("RETRIEVAL_MODE")
+    previous_usage_counter = os.environ.get("ADVISOR_USAGE_COUNTER_PATH")
     os.environ["LLM_PROVIDER"] = "disabled"
     os.environ["RATE_LIMIT_ENABLED"] = "false"
     os.environ["RETRIEVAL_MODE"] = "lexical"
+    os.environ.pop("ADVISOR_USAGE_COUNTER_PATH", None)
     get_retriever.cache_clear()
     _reset_rate_limiter_for_tests()
     try:
         payload = advise_api(DEFAULT_BRIEF)
         summary = _validate_public_payload(payload)
-        deep_payload = advise_api(DEFAULT_BRIEF, deep_thinking=True)
-        deep_summary = _validate_public_payload(deep_payload)
-        _validate_deep_research_payload(deep_payload)
+        deep_summary: dict[str, Any] = {"research_links": "disabled"}
+        if _env_bool("DEEP_THINKING_ENABLED"):
+            deep_payload = advise_api(DEFAULT_BRIEF, deep_thinking=True)
+            deep_summary = _validate_public_payload(deep_payload)
+            _validate_deep_research_payload(deep_payload)
+        else:
+            try:
+                advise_api(DEFAULT_BRIEF, deep_thinking=True)
+            except RuntimeError as exc:
+                if "Deep thinking is currently disabled" not in str(exc):
+                    raise
+            else:
+                raise AssertionError("deep-thinking request should be rejected when disabled")
     finally:
         if previous is None:
             os.environ.pop("LLM_PROVIDER", None)
@@ -389,6 +457,10 @@ def _validate_direct_public_api() -> tuple[bool, str]:
             os.environ.pop("RETRIEVAL_MODE", None)
         else:
             os.environ["RETRIEVAL_MODE"] = previous_retrieval_mode
+        if previous_usage_counter is None:
+            os.environ.pop("ADVISOR_USAGE_COUNTER_PATH", None)
+        else:
+            os.environ["ADVISOR_USAGE_COUNTER_PATH"] = previous_usage_counter
         get_retriever.cache_clear()
         _reset_rate_limiter_for_tests()
     return (
@@ -467,11 +539,21 @@ def main() -> None:
         _check("input_and_cost_bounds", ok, detail, checks)
         ok, detail = _cost_controls_ok()
         _check("cost_controls", ok, detail, checks)
+        ok, detail = _request_logging_ok()
+        _check("request_logging_alerting", ok, detail, checks)
+        ok, detail = _usage_budget_ok()
+        _check("usage_budget_caps", ok, detail, checks)
+        ok, detail = _anonymous_controls_ok()
+        _check("anonymous_public_controls", ok, detail, checks)
         ok, detail = _serving_capacity_ok()
         _check("serving_capacity", ok, detail, checks)
         ok, detail = _latency_slo_ok()
         _check("latency_slo_standard", ok, detail, checks)
-        ok, detail = _latency_slo_ok("DEEP_")
+        ok, detail = (
+            (True, "deep thinking disabled")
+            if not _env_bool("DEEP_THINKING_ENABLED")
+            else _latency_slo_ok("DEEP_")
+        )
         _check("latency_slo_deep_thinking", ok, detail, checks)
 
         vector_backend = os.getenv("VECTOR_STORE_BACKEND", "memory").strip().lower()
@@ -498,7 +580,8 @@ def main() -> None:
             ),
             checks,
         )
-        args.require_auth = True
+        if os.getenv("PUBLIC_ACCESS_MODE", "private").strip().lower() in {"authenticated", "gateway"}:
+            args.require_auth = True
         args.require_vector_index = True
 
     if args.require_auth:

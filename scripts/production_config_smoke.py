@@ -14,6 +14,9 @@ def main() -> None:
     manifest_dir = Path(tempfile.mkdtemp(prefix="rag-vector-manifest-"))
     audit_dir = root / ".readiness-audit"
     audit_path = audit_dir / "advisor-audit.jsonl"
+    request_log_path = audit_dir / "advisor-requests.jsonl"
+    alert_log_path = audit_dir / "advisor-alerts.jsonl"
+    usage_counter_path = audit_dir / "advisor-usage.json"
     try:
         import lancedb
     except ImportError:
@@ -57,13 +60,18 @@ def main() -> None:
         {
             "ADVISOR_AUDIT_LOG_PATH": str(audit_path),
             "ADVISOR_AUDIT_FAILURE_MODE": "fail",
+            "ADVISOR_ALERT_LOG_PATH": str(alert_log_path),
             "ADVISOR_CONCURRENCY_LIMIT": "2",
             "ADVISOR_QUEUE_MAX_SIZE": "32",
-            "ALLOW_ANONYMOUS_PUBLIC": "false",
+            "ADVISOR_REQUEST_LOG_PATH": str(request_log_path),
+            "ADVISOR_USAGE_COUNTER_PATH": str(usage_counter_path),
+            "ALLOW_ANONYMOUS_PUBLIC": "true",
+            "DAILY_DEEP_REQUEST_BUDGET": "20",
+            "DAILY_REQUEST_BUDGET": "200",
             "DEEP_LATENCY_SLO_P50_MS": "25000",
             "DEEP_LATENCY_SLO_P99_MS": "35000",
             "DEEP_RESEARCH_MAX_FULL_TEXT_LINKS": "4",
-            "DEEP_THINKING_ENABLED": "true",
+            "DEEP_THINKING_ENABLED": "false",
             "GRADIO_AUTH_PASSWORD": "smoke-password",
             "GRADIO_AUTH_USERNAME": "smoke-user",
             "HF_TOKEN": env.get("HF_TOKEN") or "smoke-token",
@@ -74,11 +82,17 @@ def main() -> None:
             "MAX_CONFLICT_CHARS": "1000",
             "MAX_ELICITATION_CHARS": "2000",
             "METRICS_AUTH_TOKEN": "smoke-metrics-token",
-            "PUBLIC_ACCESS_MODE": "authenticated",
+            "MONTHLY_DEEP_REQUEST_BUDGET": "200",
+            "MONTHLY_REQUEST_BUDGET": "2000",
+            "PUBLIC_ACCESS_MODE": "anonymous",
             "QDRANT_REQUIRE_ALIASES": "false",
             "RATE_LIMIT_ENABLED": "true",
+            "RATE_LIMIT_PER_IDENTITY": "true",
             "RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS": "6",
             "RATE_LIMIT_ADVISOR_DEEP_WINDOW_SECONDS": "300",
+            "REQUEST_ALERT_LATENCY_MS": "30000",
+            "REQUEST_ALERT_MAX_REQUESTS": "200",
+            "REQUEST_ALERT_WINDOW_SECONDS": "300",
             "RATE_LIMIT_MAX_REQUESTS": "100",
             "RATE_LIMIT_WINDOW_SECONDS": "60",
             "RETRIEVAL_MODE": "hybrid",

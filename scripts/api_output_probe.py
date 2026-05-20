@@ -87,8 +87,12 @@ def _first_env(*keys: str) -> str | None:
 
 
 def _client_auth(args: argparse.Namespace) -> tuple[str, str] | None:
-    username = args.auth_username or os.getenv("GRADIO_AUTH_USERNAME", "").strip()
-    password = args.auth_password or os.getenv("GRADIO_AUTH_PASSWORD", "").strip()
+    explicit = args.auth_username is not None or args.auth_password is not None
+    public_mode = os.getenv("PUBLIC_ACCESS_MODE", "").strip().lower()
+    if not explicit and public_mode in {"anonymous", "gateway"}:
+        return None
+    username = (args.auth_username if args.auth_username is not None else os.getenv("GRADIO_AUTH_USERNAME", "")).strip()
+    password = (args.auth_password if args.auth_password is not None else os.getenv("GRADIO_AUTH_PASSWORD", "")).strip()
     if bool(username) != bool(password):
         raise AssertionError("Provide both Gradio auth username and password, or neither.")
     return (username, password) if username and password else None

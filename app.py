@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from collections import deque
+from datetime import datetime, timezone
+import hashlib
 import json
 import os
+from pathlib import Path
 import threading
 import time
 from typing import Any
@@ -149,6 +152,9 @@ ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, str, 
 _RATE_LIMIT_EVENTS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
 _METRICS_LOCK = threading.Lock()
+_REQUEST_LOG_LOCK = threading.Lock()
+_USAGE_BUDGET_LOCK = threading.Lock()
+_REQUEST_EVENT_TIMES: deque[float] = deque()
 _REQUEST_METRICS: dict[str, Any] = {
     "total": 0,
     "errors": 0,
@@ -199,6 +205,18 @@ def _public_access_status() -> tuple[str, bool, str | None]:
     return mode, True, None
 
 
+def _launch_auth_credentials() -> tuple[str, str] | None:
+    """Use Gradio auth only when the public mode expects platform-local auth."""
+    mode, _, _ = _public_access_status()
+    if mode in {"anonymous", "gateway"}:
+        return None
+    return _auth_credentials()
+
+
+def _auth_active() -> bool:
+    return bool(_launch_auth_credentials() or _env_bool("EXTERNAL_AUTH_GATEWAY", False))
+
+
 def _env_int(key: str, default: int) -> int:
     value = os.getenv(key)
     if value is None or not value.strip():
@@ -211,7 +229,67 @@ def _rate_limit_key(bucket: str, suffix: str) -> str:
     return f"RATE_LIMIT_{normalized}_{suffix}"
 
 
-def _enforce_rate_limit(bucket: str) -> None:
+def _hash_identity(value: str) -> str:
+    salt = _env_str("RATE_LIMIT_IDENTITY_SALT") or _env_str("HF_SPACE_ID") or "rag-advisor"
+    return hashlib.sha256(f"{salt}:{value}".encode("utf-8")).hexdigest()[:20]
+
+
+def _request_identity(request: gr.Request | None = None) -> str:
+    """Return a stable, privacy-preserving identity for rate limiting."""
+    if request is None:
+        return "anonymous:unknown"
+
+    username = str(getattr(request, "username", "") or "").strip()
+    if username:
+        return f"user:{_hash_identity(username)}"
+
+    headers = getattr(request, "headers", {}) or {}
+    header_get = getattr(headers, "get", None)
+    forwarded_hosts: list[str] = []
+    if callable(header_get) and _env_bool("TRUST_PROXY_HEADERS", True):
+        for header_name in ("cf-connecting-ip", "x-real-ip", "x-forwarded-for", "x-client-ip"):
+            header_value = str(header_get(header_name, "") or "").strip()
+            if header_value:
+                forwarded_hosts.append(header_value.split(",", 1)[0].strip())
+
+    client = getattr(request, "client", None)
+    client_host = str(getattr(client, "host", "") or "").strip()
+    if client_host:
+        forwarded_hosts.append(client_host)
+
+    for host in forwarded_hosts:
+        if host:
+            return f"ip:{_hash_identity(host)}"
+
+    session_hash = str(getattr(request, "session_hash", "") or "").strip()
+    if session_hash:
+        return f"session:{_hash_identity(session_hash)}"
+    return "anonymous:unknown"
+
+
+def _consume_rate_limit(
+    *,
+    event_key: str,
+    max_requests: int,
+    window_seconds: int,
+    label: str,
+) -> None:
+    now = time.monotonic()
+    cutoff = now - window_seconds
+    with _RATE_LIMIT_LOCK:
+        events = _RATE_LIMIT_EVENTS.setdefault(event_key, deque())
+        while events and events[0] < cutoff:
+            events.popleft()
+        if len(events) >= max_requests:
+            retry_after = max(1, int(window_seconds - (now - events[0])))
+            raise RuntimeError(
+                f"Rate limit exceeded ({label}). "
+                f"Try again in about {retry_after} seconds."
+            )
+        events.append(now)
+
+
+def _enforce_rate_limit(bucket: str, request: gr.Request | None = None) -> None:
     if not _env_bool("RATE_LIMIT_ENABLED", False):
         return
 
@@ -229,19 +307,34 @@ def _enforce_rate_limit(bucket: str) -> None:
             _env_int("RATE_LIMIT_WINDOW_SECONDS", 60),
         ),
     )
-    now = time.monotonic()
-    cutoff = now - window_seconds
-    with _RATE_LIMIT_LOCK:
-        events = _RATE_LIMIT_EVENTS.setdefault(bucket, deque())
-        while events and events[0] < cutoff:
-            events.popleft()
-        if len(events) >= max_requests:
-            retry_after = max(1, int(window_seconds - (now - events[0])))
-            raise RuntimeError(
-                "Rate limit exceeded. "
-                f"Try again in about {retry_after} seconds or use an authenticated deployment."
-            )
-        events.append(now)
+    identity = _request_identity(request)
+    per_identity = _env_bool("RATE_LIMIT_PER_IDENTITY", True)
+    event_key = f"{bucket}:{identity}" if per_identity else bucket
+    _consume_rate_limit(
+        event_key=event_key,
+        max_requests=max_requests,
+        window_seconds=window_seconds,
+        label="Per-user" if per_identity else "Deployment",
+    )
+
+    global_max_requests = _env_int(
+        _rate_limit_key(bucket, "GLOBAL_MAX_REQUESTS"),
+        _env_int("RATE_LIMIT_GLOBAL_MAX_REQUESTS", 0),
+    )
+    if global_max_requests > 0:
+        global_window_seconds = max(
+            1,
+            _env_int(
+                _rate_limit_key(bucket, "GLOBAL_WINDOW_SECONDS"),
+                _env_int("RATE_LIMIT_GLOBAL_WINDOW_SECONDS", window_seconds),
+            ),
+        )
+        _consume_rate_limit(
+            event_key=f"{bucket}:global",
+            max_requests=max(1, global_max_requests),
+            window_seconds=global_window_seconds,
+            label="Deployment",
+        )
 
 
 def _reset_rate_limiter_for_tests() -> None:
@@ -281,6 +374,98 @@ def _prepare_advisor_inputs(
     return brief, answers, conflict
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _json_log_path(env_key: str) -> Path | None:
+    raw_path = _env_str(env_key)
+    return Path(raw_path).expanduser() if raw_path else None
+
+
+def _append_jsonl(env_key: str, payload: dict[str, Any]) -> None:
+    path = _json_log_path(env_key)
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _REQUEST_LOG_LOCK:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True) + "\n")
+    except OSError:
+        # Logging must never make the public endpoint unavailable.
+        return
+
+
+def _usage_budget_limits(deep_thinking: bool) -> dict[str, int]:
+    return {
+        "daily": _env_int("DAILY_REQUEST_BUDGET", 0),
+        "monthly": _env_int("MONTHLY_REQUEST_BUDGET", 0),
+        "daily_deep": _env_int("DAILY_DEEP_REQUEST_BUDGET", 0) if deep_thinking else 0,
+        "monthly_deep": _env_int("MONTHLY_DEEP_REQUEST_BUDGET", 0) if deep_thinking else 0,
+    }
+
+
+def _usage_budget_configured() -> bool:
+    return bool(_json_log_path("ADVISOR_USAGE_COUNTER_PATH")) and any(
+        _usage_budget_limits(True).values()
+    )
+
+
+def _enforce_usage_budget(deep_thinking: bool) -> None:
+    path = _json_log_path("ADVISOR_USAGE_COUNTER_PATH")
+    limits = _usage_budget_limits(deep_thinking)
+    if path is None or not any(limits.values()):
+        return
+
+    now = _utc_now()
+    today = now.strftime("%Y-%m-%d")
+    month = now.strftime("%Y-%m")
+    with _USAGE_BUDGET_LOCK:
+        state: dict[str, Any] = {}
+        if path.exists():
+            try:
+                state = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                state = {}
+        if state.get("day") != today:
+            state["day"] = today
+            state["requests_today"] = 0
+            state["deep_requests_today"] = 0
+        if state.get("month") != month:
+            state["month"] = month
+            state["requests_month"] = 0
+            state["deep_requests_month"] = 0
+
+        checks = [
+            ("daily", "requests_today", "daily public request budget"),
+            ("monthly", "requests_month", "monthly public request budget"),
+        ]
+        if deep_thinking:
+            checks.extend(
+                [
+                    ("daily_deep", "deep_requests_today", "daily deep-thinking budget"),
+                    ("monthly_deep", "deep_requests_month", "monthly deep-thinking budget"),
+                ]
+            )
+        for limit_name, counter_name, label in checks:
+            limit = int(limits.get(limit_name) or 0)
+            if limit > 0 and int(state.get(counter_name) or 0) >= limit:
+                raise RuntimeError(f"The {label} has been reached for this deployment.")
+
+        state["requests_today"] = int(state.get("requests_today") or 0) + 1
+        state["requests_month"] = int(state.get("requests_month") or 0) + 1
+        if deep_thinking:
+            state["deep_requests_today"] = int(state.get("deep_requests_today") or 0) + 1
+            state["deep_requests_month"] = int(state.get("deep_requests_month") or 0) + 1
+        state["updated_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
+        except OSError:
+            raise RuntimeError("Usage budget counter is not writable.")
+
+
 def _ops_token() -> str:
     return _env_str("METRICS_AUTH_TOKEN") or _env_str("OPERATIONS_TOKEN")
 
@@ -317,11 +502,14 @@ def _record_request_metric(
     deep_thinking: bool,
     generation_status: str,
     timings_ms: dict[str, Any] | None = None,
+    request_identity: str | None = None,
     error: Exception | None = None,
 ) -> None:
+    now = _utc_now()
+    alert_reasons: list[str] = []
     with _METRICS_LOCK:
         _REQUEST_METRICS["total"] += 1
-        _REQUEST_METRICS["last_request_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        _REQUEST_METRICS["last_request_at"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         _REQUEST_METRICS["last_timings_ms"] = dict(timings_ms or {})
         if deep_thinking:
             _REQUEST_METRICS["deep_thinking_total"] += 1
@@ -333,9 +521,49 @@ def _record_request_metric(
                 "type": type(error).__name__,
                 "message": str(error)[:300],
             }
+            alert_reasons.append("failed_call")
         samples = _REQUEST_METRICS["latencies_ms"]
         samples.append(round(latency_ms, 2))
         del samples[:-_metrics_sample_limit()]
+
+        window_seconds = max(1, _env_int("REQUEST_ALERT_WINDOW_SECONDS", 300))
+        spike_threshold = _env_int("REQUEST_ALERT_MAX_REQUESTS", 0)
+        monotonic_now = time.monotonic()
+        _REQUEST_EVENT_TIMES.append(monotonic_now)
+        cutoff = monotonic_now - window_seconds
+        while _REQUEST_EVENT_TIMES and _REQUEST_EVENT_TIMES[0] < cutoff:
+            _REQUEST_EVENT_TIMES.popleft()
+        spike_count = len(_REQUEST_EVENT_TIMES)
+        if spike_threshold > 0 and spike_count >= spike_threshold:
+            alert_reasons.append("traffic_spike")
+
+    latency_alert_ms = _env_int("REQUEST_ALERT_LATENCY_MS", 0)
+    if latency_alert_ms > 0 and latency_ms >= latency_alert_ms:
+        alert_reasons.append("slow_call")
+
+    event = {
+        "event": "request",
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "deep_thinking": bool(deep_thinking),
+        "generation_status": generation_status,
+        "latency_ms": round(latency_ms, 2),
+        "graph_timings_ms": dict(timings_ms or {}),
+        "request_identity": request_identity,
+        "error_type": type(error).__name__ if error else None,
+    }
+    _append_jsonl("ADVISOR_REQUEST_LOG_PATH", event)
+    if alert_reasons:
+        _append_jsonl(
+            "ADVISOR_ALERT_LOG_PATH",
+            {
+                "event": "alert",
+                "timestamp": event["timestamp"],
+                "reasons": sorted(set(alert_reasons)),
+                "request": event,
+                "window_seconds": _env_int("REQUEST_ALERT_WINDOW_SECONDS", 300),
+                "window_request_count": spike_count if "traffic_spike" in alert_reasons else None,
+            },
+        )
 
 
 def metrics_api(token: str = "") -> dict[str, Any]:
@@ -368,13 +596,31 @@ def health_api() -> dict[str, Any]:
     public_mode, public_access_configured, public_access_error = _public_access_status()
     auth_error = ""
     try:
-        auth_configured = bool(_auth_credentials() or _env_bool("EXTERNAL_AUTH_GATEWAY", False))
+        auth_configured = _auth_active()
     except RuntimeError as exc:
         auth_configured = False
         auth_error = str(exc)
     rate_limit_configured = _env_bool("RATE_LIMIT_ENABLED", False) or _env_bool(
         "EXTERNAL_RATE_LIMITING",
         False,
+    )
+    identity_rate_limit_configured = (
+        _env_bool("RATE_LIMIT_ENABLED", False)
+        and _env_bool("RATE_LIMIT_PER_IDENTITY", True)
+    ) or _env_bool("EXTERNAL_RATE_LIMITING", False)
+    request_log_configured = bool(_json_log_path("ADVISOR_REQUEST_LOG_PATH"))
+    alert_log_configured = bool(_json_log_path("ADVISOR_ALERT_LOG_PATH"))
+    usage_budget_configured = _usage_budget_configured()
+    deep_thinking_enabled = _env_bool("DEEP_THINKING_ENABLED", True)
+    anonymous_controls_ok = (
+        public_mode != "anonymous"
+        or (
+            identity_rate_limit_configured
+            and request_log_configured
+            and alert_log_configured
+            and usage_budget_configured
+            and not deep_thinking_enabled
+        )
     )
     checks = {
         "llm_provider": os.getenv("LLM_PROVIDER", "hf").strip().lower(),
@@ -388,16 +634,23 @@ def health_api() -> dict[str, Any]:
         "auth_configured": auth_configured,
         "auth_error": auth_error,
         "rate_limit_configured": rate_limit_configured,
+        "identity_rate_limit_configured": identity_rate_limit_configured,
         "advisor_concurrency_limit": _advisor_concurrency_limit(),
         "advisor_queue_max_size": _advisor_queue_max_size(),
         "metrics_protected": bool(_ops_token()),
         "audit_log_configured": bool(os.getenv("ADVISOR_AUDIT_LOG_PATH", "").strip()),
+        "request_log_configured": request_log_configured,
+        "alert_log_configured": alert_log_configured,
+        "usage_budget_configured": usage_budget_configured,
+        "deep_thinking_enabled": deep_thinking_enabled,
+        "anonymous_controls_ok": anonymous_controls_ok,
         "raw_trace_hidden": not _env_bool("SHOW_RAW_TRACE", False),
     }
     return {
         "status": "ok"
         if checks["vector_store_configured"]
         and checks["public_access_configured"]
+        and checks["anonymous_controls_ok"]
         and checks["raw_trace_hidden"]
         and checks["metrics_protected"]
         and not auth_error
@@ -942,11 +1195,12 @@ def clear_detail_response() -> ClearDetailResponse:
     return "", "", [], "", "", "", "", "", {}
 
 
-def advise(user_brief: str) -> tuple[str, dict[str, Any]]:
+def advise(user_brief: str, request: gr.Request | None = None) -> tuple[str, dict[str, Any]]:
     brief, _, _ = _prepare_advisor_inputs(user_brief, None, None, False)
     if not brief:
         return "Enter a brief to generate an initial advisor trace.", {}
-    _enforce_rate_limit("legacy")
+    _enforce_rate_limit("legacy", request)
+    _enforce_usage_budget(False)
 
     graph = build_graph()
     state = graph.invoke({"user_brief": brief})
@@ -958,6 +1212,7 @@ def advise_detailed(
     elicitation_answers: str | None = None,
     conflict_resolution: str | None = None,
     deep_thinking: bool = False,
+    request: gr.Request | None = None,
 ) -> DetailResponse:
     brief, answers, conflict = _prepare_advisor_inputs(
         user_brief,
@@ -967,7 +1222,8 @@ def advise_detailed(
     )
     if not brief:
         return _empty_detail_response("Enter a brief to generate an initial advisor trace.")
-    _enforce_rate_limit("advisor_deep" if deep_thinking else "advisor")
+    _enforce_rate_limit("advisor_deep" if deep_thinking else "advisor", request)
+    _enforce_usage_budget(deep_thinking)
 
     graph = build_graph()
     state = graph.invoke(
@@ -995,8 +1251,10 @@ def advise_api(
     elicitation_answers: str | None = None,
     conflict_resolution: str | None = None,
     deep_thinking: bool = False,
+    request: gr.Request | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
+    request_identity = _request_identity(request)
     try:
         (
             recommendation,
@@ -1007,7 +1265,7 @@ def advise_api(
             advisor_reasoning_trace,
             research,
             raw_trace,
-        ) = advise_detailed(user_brief, elicitation_answers, conflict_resolution, deep_thinking)
+        ) = advise_detailed(user_brief, elicitation_answers, conflict_resolution, deep_thinking, request)
         topology = raw_trace.get("draft_output", {}).get("topology") or {}
         generation = _public_generation_status(raw_trace)
         timings_ms = raw_trace.get("timings_ms") or {}
@@ -1040,6 +1298,7 @@ def advise_api(
             deep_thinking=bool(raw_trace.get("deep_thinking")),
             generation_status=str(generation.get("status") or "unknown"),
             timings_ms=timings_ms,
+            request_identity=request_identity,
         )
         return payload
     except Exception as exc:
@@ -1047,6 +1306,7 @@ def advise_api(
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
             deep_thinking=deep_thinking,
             generation_status="error",
+            request_identity=request_identity,
             error=exc,
         )
         raise
@@ -1058,6 +1318,15 @@ def build_demo():
 
     with gr.Blocks(title="RAG Architecture Advisor") as demo:
         show_raw_trace = _env_bool("SHOW_RAW_TRACE", False)
+        deep_thinking_enabled = _env_bool("DEEP_THINKING_ENABLED", True)
+        public_notice = (
+            PUBLIC_NOTICE_MD
+            if deep_thinking_enabled
+            else PUBLIC_NOTICE_MD.replace(
+                "- Deep thinking reads selected public references and may take longer than a standard run.",
+                "- Deep thinking is disabled for anonymous public access.",
+            )
+        )
         gr.HTML(f"<style>{APP_CSS}</style>")
         gr.Markdown(PUBLIC_HEADER_MD)
         with gr.Row(equal_height=False, elem_classes=["advisor-input-grid"]):
@@ -1089,14 +1358,19 @@ def build_demo():
                     deep_thinking = gr.Checkbox(
                         label="Deep thinking",
                         value=False,
+                        visible=deep_thinking_enabled,
                     )
             with gr.Column(scale=1, min_width=0, elem_classes=["advisor-side-column"]):
-                gr.Markdown(PUBLIC_NOTICE_MD, elem_classes=["advisor-notice"])
+                gr.Markdown(public_notice, elem_classes=["advisor-notice"])
                 with gr.Accordion("Operational boundary", open=False):
                     gr.Markdown(
                         "Public runs are rate limited. Standard mode is the default. "
-                        "Deep thinking is reserved for briefs that need full-reference "
-                        "research synthesis."
+                        + (
+                            "Deep thinking is reserved for briefs that need full-reference "
+                            "research synthesis."
+                            if deep_thinking_enabled
+                            else "Deep thinking is disabled on the anonymous public surface."
+                        )
                     )
 
         with gr.Tabs(elem_classes=["advisor-tabs"]):
@@ -1206,5 +1480,5 @@ if __name__ == "__main__":
             server_name=os.getenv("GRADIO_SERVER_NAME", "0.0.0.0"),
             server_port=int(os.getenv("GRADIO_SERVER_PORT", "7860")),
             share=os.getenv("GRADIO_SHARE", "false").lower() == "true",
-            auth=_auth_credentials(),
+            auth=_launch_auth_credentials(),
         )

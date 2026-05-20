@@ -59,8 +59,14 @@ def main() -> None:
                             "public_access_configured",
                             "auth_configured",
                             "rate_limit_configured",
+                            "identity_rate_limit_configured",
                             "metrics_protected",
                             "audit_log_configured",
+                            "request_log_configured",
+                            "alert_log_configured",
+                            "usage_budget_configured",
+                            "deep_thinking_enabled",
+                            "anonymous_controls_ok",
                             "raw_trace_hidden",
                         )
                     },
@@ -78,8 +84,12 @@ def main() -> None:
 
 
 def _client_auth(args: argparse.Namespace) -> tuple[str, str] | None:
-    username = args.auth_username or os.getenv("GRADIO_AUTH_USERNAME", "").strip()
-    password = args.auth_password or os.getenv("GRADIO_AUTH_PASSWORD", "").strip()
+    explicit = args.auth_username is not None or args.auth_password is not None
+    public_mode = os.getenv("PUBLIC_ACCESS_MODE", "").strip().lower()
+    if not explicit and public_mode in {"anonymous", "gateway"}:
+        return None
+    username = (args.auth_username if args.auth_username is not None else os.getenv("GRADIO_AUTH_USERNAME", "")).strip()
+    password = (args.auth_password if args.auth_password is not None else os.getenv("GRADIO_AUTH_PASSWORD", "")).strip()
     if bool(username) != bool(password):
         raise AssertionError("Provide both Gradio auth username and password, or neither.")
     return (username, password) if username and password else None
@@ -92,13 +102,27 @@ def _validate_health(payload: Any) -> None:
         raise AssertionError(f"health endpoint is not ok: {payload}")
     checks = payload.get("checks") or {}
     required = {
-        "auth_configured",
         "public_access_configured",
         "rate_limit_configured",
         "metrics_protected",
         "audit_log_configured",
         "raw_trace_hidden",
     }
+    public_mode = checks.get("public_access_mode")
+    if public_mode == "authenticated":
+        required.add("auth_configured")
+    if public_mode == "anonymous":
+        required.update(
+            {
+                "identity_rate_limit_configured",
+                "request_log_configured",
+                "alert_log_configured",
+                "usage_budget_configured",
+                "anonymous_controls_ok",
+            }
+        )
+        if checks.get("deep_thinking_enabled"):
+            raise AssertionError("anonymous public mode should disable deep thinking")
     missing = [key for key in required if not checks.get(key)]
     if missing:
         raise AssertionError(f"health checks failed: {missing}")

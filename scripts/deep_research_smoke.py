@@ -12,6 +12,11 @@ os.environ["LLM_PROVIDER"] = "disabled"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 os.environ["ADVISOR_LATENCY_PROFILE"] = "quality"
 os.environ["DEEP_RESEARCH_FULL_TEXT"] = "false"
+os.environ["DEEP_THINKING_ENABLED"] = "true"
+os.environ["ADVISOR_USAGE_COUNTER_PATH"] = ""
+os.environ["PREWARM_RETRIEVER"] = "false"
+os.environ["RETRIEVAL_MODE"] = "lexical"
+os.environ["VECTOR_STORE_BACKEND"] = "memory"
 
 from app import advise_api, advise_detailed
 from graph.build import build_graph

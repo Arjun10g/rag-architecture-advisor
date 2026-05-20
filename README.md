@@ -149,25 +149,35 @@ are configured. Before treating an environment as production, run:
 python3 scripts/production_readiness_check.py --profile production
 python3 scripts/public_surface_probe.py --url https://<space-or-host>/
 python3 scripts/api_output_probe.py --url https://<space-or-host>/ --runs 5 --slo-from-env
-python3 scripts/api_output_probe.py --url https://<space-or-host>/ --deep-thinking --slo-from-env
 python3 scripts/load_probe.py --url https://<space-or-host>/ --requests 6 --concurrency 3 --slo-from-env
 python3 scripts/hf_generation_probe.py
 python3 scripts/qdrant_blue_green_promote.py --target-table rag_advisor_chunks --alias-table rag_advisor_chunks_live --dry-run
 ```
 
+Run the deep-thinking probe only in authenticated or internal profiles where
+`DEEP_THINKING_ENABLED=true`.
+
 Production settings to verify:
 
 - Set `HF_TOKEN`, `LLM_PROVIDER=hf`, and `HF_INFERENCE_MODEL` as deployment
   secrets/variables. The probes never print token values.
-- Set `PUBLIC_ACCESS_MODE=authenticated` with `GRADIO_AUTH_USERNAME` and
-  `GRADIO_AUTH_PASSWORD`, or use `PUBLIC_ACCESS_MODE=gateway` only when a real
-  authenticated gateway is in front of the app. Anonymous public mode must set
-  `ALLOW_ANONYMOUS_PUBLIC=true` intentionally.
-- Set `RATE_LIMIT_ENABLED=true` with `RATE_LIMIT_MAX_REQUESTS` and
+- For public anonymous access, set `PUBLIC_ACCESS_MODE=anonymous`,
+  `ALLOW_ANONYMOUS_PUBLIC=true`, and `DEEP_THINKING_ENABLED=false`. For private
+  beta, use `PUBLIC_ACCESS_MODE=authenticated` with `GRADIO_AUTH_USERNAME` and
+  `GRADIO_AUTH_PASSWORD`, or `PUBLIC_ACCESS_MODE=gateway` only when a real
+  authenticated gateway is in front of the app.
+- Set `RATE_LIMIT_ENABLED=true` and `RATE_LIMIT_PER_IDENTITY=true` with
+  `RATE_LIMIT_ADVISOR_MAX_REQUESTS`, `RATE_LIMIT_MAX_REQUESTS`, and
   `RATE_LIMIT_WINDOW_SECONDS`; keep separate deep-mode limits with
   `RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS` and
   `RATE_LIMIT_ADVISOR_DEEP_WINDOW_SECONDS`. Set `EXTERNAL_RATE_LIMITING=true`
   only when an upstream gateway enforces the limit.
+- Set `ADVISOR_REQUEST_LOG_PATH`, `ADVISOR_ALERT_LOG_PATH`, and
+  `ADVISOR_USAGE_COUNTER_PATH` to persistent storage. Configure
+  `REQUEST_ALERT_MAX_REQUESTS`, `REQUEST_ALERT_LATENCY_MS`,
+  `DAILY_REQUEST_BUDGET`, and `MONTHLY_REQUEST_BUDGET` as app-level spend and
+  abuse caps. Also set provider/platform billing caps where the host supports
+  them.
 - Set `ADVISOR_CONCURRENCY_LIMIT` and `ADVISOR_QUEUE_MAX_SIZE` for the chosen
   hardware. CPU-basic Spaces should stay conservative and must pass
   `load_probe.py` before public traffic is increased.
@@ -210,18 +220,28 @@ Production settings to verify:
   or `OPERATIONS_TOKEN`; it exposes request counts, p50/p95/p99 latency, the
   last graph timing breakdown, and error counts.
 
-Public launch mode used by the hosted Space:
+Anonymous public launch mode used by the hosted Space:
 
 ```bash
-PUBLIC_ACCESS_MODE=authenticated
-GRADIO_AUTH_USERNAME=<set as variable>
-GRADIO_AUTH_PASSWORD=<set as secret>
+PUBLIC_ACCESS_MODE=anonymous
+ALLOW_ANONYMOUS_PUBLIC=true
+DEEP_THINKING_ENABLED=false
 METRICS_AUTH_TOKEN=<set as secret>
 RATE_LIMIT_ENABLED=true
-RATE_LIMIT_MAX_REQUESTS=30
+RATE_LIMIT_PER_IDENTITY=true
+TRUST_PROXY_HEADERS=true
+RATE_LIMIT_ADVISOR_MAX_REQUESTS=8
+RATE_LIMIT_MAX_REQUESTS=8
 RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS=6
-RATE_LIMIT_ADVISOR_DEEP_WINDOW_SECONDS=300
+RATE_LIMIT_GLOBAL_MAX_REQUESTS=60
+RATE_LIMIT_GLOBAL_WINDOW_SECONDS=60
+ADVISOR_REQUEST_LOG_PATH=/data/advisor-requests.jsonl
+ADVISOR_ALERT_LOG_PATH=/data/advisor-alerts.jsonl
+ADVISOR_USAGE_COUNTER_PATH=/data/advisor-usage.json
+DAILY_REQUEST_BUDGET=250
+MONTHLY_REQUEST_BUDGET=3000
+REQUEST_ALERT_MAX_REQUESTS=50
+REQUEST_ALERT_LATENCY_MS=20000
 ADVISOR_CONCURRENCY_LIMIT=2
 ADVISOR_QUEUE_MAX_SIZE=32
 ```
