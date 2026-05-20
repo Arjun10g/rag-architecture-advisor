@@ -171,10 +171,10 @@ Production settings to verify:
   mounted volume instead, ship the built index under `corpus/index/lancedb` and
   set `VECTOR_INDEX_BOOTSTRAP_DIR=corpus/index/lancedb` so first boot copies the
   artifact into that volume.
-- Keep `LATENCY_SLO_P50_MS=10000` and `LATENCY_SLO_P99_MS=15000` as the standard
-  hosted SLO unless product requirements say otherwise. Deep-thinking/full-text
-  mode uses `DEEP_LATENCY_SLO_P50_MS=25000` and
-  `DEEP_LATENCY_SLO_P99_MS=35000`.
+- Keep `LATENCY_SLO_P50_MS=20000` and `LATENCY_SLO_P99_MS=30000` as the standard
+  hosted hybrid/LanceDB SLO after cold model load, unless product requirements
+  say otherwise. Deep-thinking/full-text mode uses
+  `DEEP_LATENCY_SLO_P50_MS=35000` and `DEEP_LATENCY_SLO_P99_MS=45000`.
 - If hosted Llama latency misses the SLO, set `ADVISOR_LATENCY_PROFILE=fast` to
   use the deterministic grounded narrative while preserving retrieval,
   citations, deployment projection, and audit output.
