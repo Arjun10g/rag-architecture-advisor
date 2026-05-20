@@ -52,6 +52,7 @@ python3 -m compileall app.py graph agents retrieval ingestion synth llm eval scr
 python3 scripts/router_state_smoke.py
 python3 scripts/graph_flow_smoke.py
 python3 scripts/specialist_fanout_smoke.py
+python3 scripts/topology_catalog_smoke.py
 python3 scripts/vector_store_smoke.py
 python3 scripts/llm_provider_smoke.py
 python3 scripts/app_formatting_smoke.py
