@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - optional local convenience.
     load_dotenv = None
 
 from app import advise_api
+from llm.provider import DEFAULT_HF_INFERENCE_MODEL
 from scripts.api_output_probe import DEFAULT_BRIEF, _validate_public_payload
 
 
@@ -101,11 +102,12 @@ def main() -> None:
     _check("public_api_contract", ok, detail, checks)
 
     provider = os.getenv("LLM_PROVIDER", "hf").strip().lower()
+    configured_model = os.getenv("HF_INFERENCE_MODEL") or DEFAULT_HF_INFERENCE_MODEL
     _check("llm_provider_configured", provider in {"hf", "disabled"}, f"LLM_PROVIDER={provider}", checks)
     _check(
         "hf_model_configured",
-        _nonempty_env("HF_INFERENCE_MODEL"),
-        f"model={'set' if _nonempty_env('HF_INFERENCE_MODEL') else 'missing'}",
+        bool(configured_model.strip()),
+        "model=set" if configured_model.strip() else "model=missing",
         checks,
     )
 
