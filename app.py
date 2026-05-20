@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import threading
 import time
 from typing import Any
@@ -147,8 +148,8 @@ PUBLIC_NOTICE_MD = """
 - Deep thinking reads selected public references and may take longer than a standard run.
 """
 
-DetailResponse = tuple[str, str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
-ClearDetailResponse = tuple[str, str, str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
+DetailResponse = tuple[str, str, str, str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
+ClearDetailResponse = tuple[str, str, str, str, str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
 _RATE_LIMIT_EVENTS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
 _METRICS_LOCK = threading.Lock()
@@ -884,6 +885,270 @@ def _format_design_plan_section(
     return lines
 
 
+CURATION_BUCKETS: tuple[dict[str, Any], ...] = (
+    {
+        "key": "requirements",
+        "title": "Requirement And Topology Framing",
+        "purpose": "Shows how the brief is turned into a topology choice and explicit constraints.",
+        "tokens": ("routing", "attribute", "topology", "decision_playbook", "decision playbook"),
+    },
+    {
+        "key": "chunking",
+        "title": "Chunking And Parsing",
+        "purpose": "Checks whether the selected evidence supports the chunk shape used for markdown, code, tables, and citations.",
+        "tokens": ("chunking", "parsing", "parser", "code fence", "markdown", "sectioning"),
+    },
+    {
+        "key": "embedding_vector",
+        "title": "Embedding And Vector Operations",
+        "purpose": "Covers embedding dimensions, vector index migration, freshness, and storage tradeoffs.",
+        "tokens": ("embedding", "dimension", "vector_ops", "blue-green", "reindex", "freshness", "ann"),
+    },
+    {
+        "key": "retrieval",
+        "title": "Retrieval And Matching",
+        "purpose": "Explains lexical, dense, hybrid, and exact-term matching choices.",
+        "tokens": ("retrieval", "matching", "bm25", "dense", "hybrid", "rrf", "candidate"),
+    },
+    {
+        "key": "reranking_context",
+        "title": "Reranking And Context Selection",
+        "purpose": "Covers second-stage precision, candidate fanout, and what reaches the generator.",
+        "tokens": ("rerank", "cross-encoder", "context", "grounding", "compression", "packing"),
+    },
+    {
+        "key": "security",
+        "title": "Security And Governance",
+        "purpose": "Maps permission checks, audit lineage, tenant controls, and public-surface safety.",
+        "tokens": ("rbac", "permission", "acl", "security", "governance", "audit", "tenant"),
+    },
+    {
+        "key": "evaluation",
+        "title": "Evaluation And Gold Sets",
+        "purpose": "Turns the literature into regression tests, latency gates, and answer-quality checks.",
+        "tokens": ("evaluation", "gold", "mrr", "ndcg", "recall", "latency", "percentile"),
+    },
+    {
+        "key": "deployment",
+        "title": "Deployment, Cost, And Operations",
+        "purpose": "Covers cloud mapping, IaC, monitoring, scaling, cost, and rollout controls.",
+        "tokens": ("cloud", "iac", "terraform", "deployment", "cost", "billing", "monitoring", "observability"),
+    },
+)
+
+
+def _clean_section_heading(value: str) -> str:
+    parts = [part.strip() for part in str(value or "").split(">") if part.strip()]
+    cleaned: list[str] = []
+    for part in parts:
+        part = re.sub(r"^\d+\s*[.\-—]\s*", "", part).strip()
+        part = part.strip("# ").strip()
+        if part:
+            cleaned.append(part)
+    if not cleaned:
+        return "Unsectioned literature"
+    return " > ".join(cleaned[-3:])
+
+
+def _curation_sources(state: AdvisorState) -> list[dict[str, Any]]:
+    output = state.draft_output or {}
+    evidence_pack = output.get("evidence_pack") or {}
+    sources = evidence_pack.get("all_sources") or output.get("sources") or []
+    curated: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for source in sources:
+        source_id = str(source.get("source_id") or "")
+        if source_id in seen:
+            continue
+        seen.add(source_id)
+        snippet = str(source.get("snippet") or "").strip()
+        element_type = str(source.get("element_type") or "").lower()
+        if len(snippet) < 45 or snippet.startswith(("Generated:", "```")):
+            continue
+        if element_type in {"code_fence", "mermaid", "reference"}:
+            continue
+        curated.append(source)
+    return curated
+
+
+def _bucket_for_source(source: dict[str, Any]) -> str:
+    display_text = " ".join(
+        str(source.get(key) or "")
+        for key in ("title", "section", "snippet")
+    ).lower()
+    text = " ".join(
+        str(source.get(key) or "")
+        for key in ("source_id", "title", "section", "snippet", "source_path")
+    ).lower()
+    used_by = {str(item).lower() for item in source.get("used_by") or []}
+    if "security" in used_by:
+        return "security"
+    if any(token in display_text for token in ("chunking", "parsing", "parser", "code fence", "markdown", "sectioning")):
+        return "chunking"
+    if "evaluation" in used_by and any(token in text for token in ("gold", "evaluation", "mrr", "ndcg", "recall")):
+        return "evaluation"
+    if "cloud_iac" in used_by and any(token in text for token in ("cloud", "terraform", "managed vector", "billing")):
+        return "deployment"
+    if any(token in display_text for token in ("rerank", "cross-encoder", "context", "grounding", "compression", "packing")):
+        return "reranking_context"
+    if any(token in text for token in ("embedding", "dimension", "vector_ops", "blue-green", "reindex", "freshness", "ann")):
+        return "embedding_vector"
+    if any(token in text for token in ("retrieval", "matching", "bm25", "dense", "hybrid", "rrf", "candidate")):
+        return "retrieval"
+    for bucket in CURATION_BUCKETS:
+        if any(token in text for token in bucket["tokens"]):
+            return str(bucket["key"])
+    if "retrieval" in used_by:
+        return "retrieval"
+    if "cloud_iac" in used_by:
+        return "embedding_vector"
+    if "evaluation" in used_by:
+        return "evaluation"
+    return "requirements"
+
+
+def _group_curation_sources(state: AdvisorState) -> dict[str, list[dict[str, Any]]]:
+    grouped = {str(bucket["key"]): [] for bucket in CURATION_BUCKETS}
+    for source in _curation_sources(state):
+        key = _bucket_for_source(source)
+        grouped.setdefault(key, []).append(source)
+    for key, sources in grouped.items():
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for source in sources:
+            fingerprint = (
+                _clean_section_heading(str(source.get("section") or source.get("title") or "")).lower(),
+                str(source.get("snippet") or "").strip().lower()[:140],
+            )
+            key_text = "||".join(fingerprint)
+            if key_text in seen:
+                continue
+            seen.add(key_text)
+            deduped.append(source)
+        deduped.sort(key=lambda source, bucket_key=key: _curation_sort_key(source, bucket_key))
+        grouped[key] = deduped
+    return grouped
+
+
+def _curation_sort_key(source: dict[str, Any], bucket_key: str) -> tuple[int, int, str]:
+    section = str(source.get("section") or "").lower()
+    title = str(source.get("title") or "").lower()
+    snippet = str(source.get("snippet") or "").lower()
+    score = int(source.get("evidence_quality") or 0)
+    if bucket_key == "chunking":
+        if "chunking" in section or "parsing" in section:
+            score += 20
+        if "blue-green" in section:
+            score -= 8
+    elif bucket_key == "retrieval":
+        if "hybrid" in section or "retrieval pipeline" in title:
+            score += 12
+        if "default settings" in section:
+            score += 4
+    elif bucket_key == "reranking_context":
+        if "cross-encoder" in section or "cross-encoder" in snippet:
+            score += 12
+    elif bucket_key == "embedding_vector":
+        if "dimension" in section:
+            score += 12
+        if "blue-green" in section:
+            score += 5
+    elif bucket_key == "evaluation":
+        if "gold" in section:
+            score += 12
+        if "metrics" in section:
+            score += 8
+    return (-score, len(section), section)
+
+
+def _format_literature_curation(state: AdvisorState) -> str:
+    grouped = _group_curation_sources(state)
+    lines = [
+        "## Curated Literature Map",
+        "The advisor reads selected markdown subsections, cleans them into short takeaways, and then uses those takeaways to support the plan. This view shows the subsection coverage without exposing raw file names.",
+        "",
+    ]
+    for bucket in CURATION_BUCKETS:
+        key = str(bucket["key"])
+        items = grouped.get(key, [])[:4]
+        lines.append(f"### {bucket['title']}")
+        lines.append(f"**Role in the answer:** {bucket['purpose']}")
+        if items:
+            lines.append("")
+            lines.append("**Curated subsections:**")
+            for source in items:
+                label = source.get("evidence_label") or "E?"
+                section = _clean_section_heading(str(source.get("section") or source.get("title") or ""))
+                snippet = str(source.get("snippet") or "").strip()
+                lines.append(f"- **[{label}] {section}:** {snippet}")
+        else:
+            lines.extend(
+                [
+                    "",
+                    "**Coverage note:** No strong subsection from this lens was selected for the current brief. Keep it as an explicit validation gap instead of silently implying coverage.",
+                ]
+            )
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _format_implementation_plan(state: AdvisorState) -> str:
+    output = state.draft_output or {}
+    topology = output.get("topology") or {}
+    decisions = _decision_by_area(state)
+    pending = [ATTRIBUTE_LABELS.get(attr, attr) for attr in state.pending_elicitation]
+    topology_name = topology.get("name", "Pending topology")
+    retrieval_choice = _decision_text(
+        decisions,
+        "retrieval_strategy",
+        "Hybrid lexical and dense candidate generation",
+    )
+    vector_choice = _decision_text(
+        decisions,
+        "vector_database",
+        "Managed vector index with metadata filters and aliases",
+    )
+    rerank_choice = _decision_text(
+        decisions,
+        "reranking",
+        "Bounded reranking before context packing",
+    )
+
+    lines = [
+        "## Coherent Build Plan",
+        f"**Target topology:** {topology_name}",
+        "",
+        "### 1. Confirm The Brief",
+        "Lock the domain, source types, sensitivity, freshness cadence, citation needs, and latency target before changing infrastructure.",
+        f"**Exit criteria:** {'Resolve ' + ', '.join(pending) if pending else 'No high-impact questions remain open for this brief.'}",
+        "",
+        "### 2. Freeze The Corpus Contract",
+        "Normalize the markdown corpus into manifest entries, preserve heading breadcrumbs, and keep line-level provenance for citation and debugging.",
+        "**Exit criteria:** chunking smokes cover fenced code, tables, lists, front matter, and section breadcrumbs.",
+        "",
+        "### 3. Build Retrieval Profiles",
+        f"Use {retrieval_choice}. Keep lexical-only, dense-only, hybrid, and hybrid-plus-rerank profiles runnable from the same gold set.",
+        "**Exit criteria:** retrieval ablations report Recall@k, MRR, nDCG, and p50/p95/p99 retrieval latency.",
+        "",
+        "### 4. Store And Promote Indexes",
+        f"Use {vector_choice}. Keep 1024d and 512d collections separate and promote through aliases instead of overwriting live data.",
+        "**Exit criteria:** both dimension collections smoke successfully and alias promotion is reversible.",
+        "",
+        "### 5. Rerank And Pack Context",
+        f"{rerank_choice}. Pack concise evidence summaries with labels, source caps, and diversity checks before generation.",
+        "**Exit criteria:** answer probes show cited decisions, no raw file paths, no raw graph markers, and readable evidence summaries.",
+        "",
+        "### 6. Generate The Advisor Answer",
+        "Use the stronger hosted Llama model for narrative reasoning, with deterministic fallback when provider latency or availability fails.",
+        "**Exit criteria:** the answer explains why each decision was made, which tradeoff was accepted, and which validation gate proves it.",
+        "",
+        "### 7. Gate Production",
+        "Run routing, retrieval, reranking, answer, public-surface, security, deep-thinking, and load probes before public release.",
+        "**Exit criteria:** public `/health` is ok, `/metrics` is token-protected, p50/p99 SLOs pass, and every failed production case becomes a new gold-set item.",
+    ]
+    return "\n".join(lines)
+
+
 def _format_design_plan(state: AdvisorState) -> str:
     decisions = _decision_by_area(state)
     embedding_model = _env_str("EMBEDDING_MODEL", "mixedbread-ai/mxbai-embed-large-v1")
@@ -1401,11 +1666,11 @@ def _terraform(state: AdvisorState) -> str:
 def _empty_detail_response(
     message: str,
 ) -> DetailResponse:
-    return message, "", "", [], "", "", "", "", {}
+    return message, "", "", "", "", [], "", "", "", "", {}
 
 
 def clear_detail_response() -> ClearDetailResponse:
-    return "", "", "", "", [], "", "", "", "", {}
+    return "", "", "", "", "", "", [], "", "", "", "", {}
 
 
 def advise(user_brief: str, request: gr.Request | None = None) -> tuple[str, dict[str, Any]]:
@@ -1449,7 +1714,9 @@ def advise_detailed(
     )
     return (
         _format_recommendation(state),
+        _format_implementation_plan(state),
         _format_design_plan(state),
+        _format_literature_curation(state),
         _format_architecture_decisions(state),
         _source_rows(state),
         _format_deployment(state),
@@ -1515,7 +1782,9 @@ def advise_api(
     try:
         (
             recommendation,
+            implementation_plan,
             design_plan,
+            literature_curation,
             architecture_decisions,
             source_rows,
             deployment_projection,
@@ -1531,7 +1800,9 @@ def advise_api(
         payload = {
             "topology": topology.get("name"),
             "recommendation": recommendation,
+            "implementation_plan": implementation_plan,
             "design_plan": design_plan,
+            "literature_curation": literature_curation,
             "architecture_decisions": architecture_decisions,
             "reasoning_chunks": _public_reasoning_chunks(source_rows),
             "deployment_projection": deployment_projection,
@@ -1636,9 +1907,13 @@ def build_demo():
         with gr.Tabs(elem_classes=["advisor-tabs"]):
             with gr.Tab("Recommendation"):
                 recommendation = gr.Markdown(label="Recommendation")
+            with gr.Tab("Build Plan"):
+                implementation_plan = gr.Markdown(label="Coherent Build Plan")
             with gr.Tab("Design Plan"):
                 design_plan = gr.Markdown(label="RAG Implementation Design Plan")
-            with gr.Tab("Architecture"):
+            with gr.Tab("Literature Map"):
+                literature_curation = gr.Markdown(label="Curated Literature Map")
+            with gr.Tab("Decisions"):
                 decisions = gr.Markdown(label="Architecture Decisions")
             with gr.Tab("Evidence"):
                 sources = gr.Dataframe(
@@ -1649,12 +1924,12 @@ def build_demo():
                 )
             with gr.Tab("Deployment"):
                 deployment = gr.Markdown(label="Deployment Projection")
-            with gr.Tab("Terraform"):
-                terraform = gr.Textbox(label="Terraform Sketch", lines=18)
             with gr.Tab("Trace"):
                 trace = gr.Markdown(label="Advisor Reasoning Trace")
             with gr.Tab("Research"):
                 research = gr.Markdown(label="Deep Research Links")
+            with gr.Tab("Terraform"):
+                terraform = gr.Textbox(label="Terraform Sketch", lines=18)
             if show_raw_trace:
                 with gr.Tab("Raw JSON"):
                     raw_trace = gr.JSON(label="Raw Trace")
@@ -1670,7 +1945,9 @@ def build_demo():
 
         outputs = [
             recommendation,
+            implementation_plan,
             design_plan,
+            literature_curation,
             decisions,
             sources,
             deployment,

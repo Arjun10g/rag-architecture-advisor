@@ -30,7 +30,9 @@ def main() -> None:
 
     (
         recommendation,
+        implementation_plan,
         design_plan,
+        literature_curation,
         decisions,
         sources,
         deployment,
@@ -41,6 +43,20 @@ def main() -> None:
     ) = advise_detailed(brief)
     if "Two-stage hybrid" not in recommendation:
         raise AssertionError("recommendation tab is missing selected topology")
+    for heading in ("Confirm The Brief", "Build Retrieval Profiles", "Gate Production"):
+        if heading not in implementation_plan:
+            raise AssertionError(f"build plan is missing {heading}")
+    for heading in (
+        "Curated Literature Map",
+        "Chunking And Parsing",
+        "Embedding And Vector Operations",
+        "Retrieval And Matching",
+        "Evaluation And Gold Sets",
+    ):
+        if heading not in literature_curation:
+            raise AssertionError(f"literature map is missing {heading}")
+    if "raw file names" not in literature_curation:
+        raise AssertionError("literature map should explain that raw file names are hidden")
     for heading in (
         "Embedding Model",
         "Embedding Dimension",
@@ -81,7 +97,9 @@ def main() -> None:
         raise AssertionError("trace tab is missing literature-grounded reasoning")
     if "Deep thinking is disabled" not in research:
         raise AssertionError("research tab should explain when deep thinking is disabled")
-    visible_output = "\n".join([recommendation, design_plan, decisions, deployment, decision_trace])
+    visible_output = "\n".join(
+        [recommendation, implementation_plan, design_plan, literature_curation, decisions, deployment, decision_trace]
+    )
     forbidden = ["corpus_", "router:start", "Graph Trace", "Requirement Vector", "two_stage_hybrid_rerank", "retrieval_strategy"]
     if any(token in visible_output for token in forbidden):
         raise AssertionError("visible output should not expose raw source IDs, graph markers, or internal keys")
@@ -105,6 +123,10 @@ def main() -> None:
         raise AssertionError("public API response is missing advisor reasoning fields")
     if "Evaluation Sets" not in str(public.get("design_plan") or ""):
         raise AssertionError("public API response is missing the structured design plan")
+    if "Gate Production" not in str(public.get("implementation_plan") or ""):
+        raise AssertionError("public API response is missing the coherent build plan")
+    if "Curated Literature Map" not in str(public.get("literature_curation") or ""):
+        raise AssertionError("public API response is missing literature curation")
 
     deep_public = advise_api(brief, deep_thinking=True)
     if not deep_public.get("deep_thinking"):
@@ -117,9 +139,9 @@ def main() -> None:
         raise AssertionError("deep-thinking research links should include Hugging Face references")
 
     deep_detailed = advise_detailed(brief, deep_thinking=True)
-    if "Deep Research Agents" not in deep_detailed[7]:
+    if "Deep Research Agents" not in deep_detailed[9]:
         raise AssertionError("research tab should render deep-thinking agent findings")
-    if "Ran deep research agents" not in deep_detailed[6]:
+    if "Ran deep research agents" not in deep_detailed[8]:
         raise AssertionError("trace tab should include the deep-thinking agent step")
 
     unresolved = advise_detailed("We need a RAG system, but the domain is unknown.")
@@ -130,11 +152,11 @@ def main() -> None:
         "A clinical HIPAA assistant over PHI patient records asks to use an external API.",
         conflict_resolution="preserve_compliance",
     )
-    if "conflict:resolved:preserve_compliance" not in resolved[8].get("graph_trace", []):
+    if "conflict:resolved:preserve_compliance" not in resolved[10].get("graph_trace", []):
         raise AssertionError("conflict resolution control was not passed into the graph")
 
     cleared = clear_detail_response()
-    if cleared != ("", "", "", "", [], "", "", "", "", {}):
+    if cleared != ("", "", "", "", "", "", [], "", "", "", "", {}):
         raise AssertionError("clear response shape changed")
 
     print(f"sources={len(sources)} domain={raw['domain_prior']}")

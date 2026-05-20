@@ -27,14 +27,18 @@ An agentic RAG architecture advisor that maps a user's situation to a defensible
 
 Track A is this application: a Gradio app on Hugging Face Spaces, backed by a LangGraph-style state machine, startup-built retrieval index, and bounded reflection.
 
-Track B is what the app produces: selected RAG topology, a structured RAG design
-plan, linked pipeline and deployment views, Terraform module sketch,
-strengths/weaknesses, and the decision log.
+Track B is what the app produces: selected RAG topology, a coherent build plan,
+a structured RAG design plan, a curated literature map, linked pipeline and
+deployment views, Terraform module sketch, strengths/weaknesses, and the
+decision log.
 The detailed UI also accepts follow-up answers for pending attributes and an
 explicit conflict-resolution value, then reruns the same graph with those values.
 The Design Plan tab organizes the concrete implementation choices: embedding
 model, embedding dimensions, chunking, pooling, vector database, retrieval,
 reranking, context presentation, and the evaluation sets needed to validate them.
+The Literature Map tab groups selected markdown subsections into readable
+takeaways by topic, so users see how the corpus shaped the answer without raw
+file names or chunk identifiers.
 
 Deep-thinking mode adds a parallel research pass before synthesis. It runs four
 agent roles over the local literature corpus and curated public references:
@@ -142,8 +146,8 @@ trace markers, or raw attribute codes. If the provider is unavailable, the app
 uses deterministic fallback and records the reason in `draft_output.generation`.
 
 For Gradio clients, use the public `/advise` endpoint. It returns the advisor
-answer, structured design plan, architecture decisions, evidence summaries,
-deployment projection,
+answer, coherent build plan, structured design plan, literature curation,
+architecture decisions, evidence summaries, deployment projection,
 Terraform sketch, public reasoning trace, and generation status without the raw
 graph state:
 

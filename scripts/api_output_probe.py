@@ -255,7 +255,9 @@ def _validate_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     _require(A_CODE_RE.search(public_text) is None, "public API leaked raw requirement attribute codes")
 
     recommendation = str(payload.get("recommendation") or "")
+    implementation_plan = str(payload.get("implementation_plan") or "")
     design_plan = str(payload.get("design_plan") or "")
+    literature_curation = str(payload.get("literature_curation") or "")
     decisions = str(payload.get("architecture_decisions") or "")
     trace = str(payload.get("advisor_reasoning_trace") or "")
     deployment = str(payload.get("deployment_projection") or "")
@@ -265,6 +267,17 @@ def _validate_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     _require("Two-stage hybrid" in recommendation, "recommendation is missing the selected topology")
     _require("Agentic Reasoning Trace" in recommendation, "recommendation is missing agentic reasoning")
+    for heading in ("Confirm The Brief", "Build Retrieval Profiles", "Gate Production"):
+        _require(heading in implementation_plan, f"build plan is missing {heading}")
+    for heading in (
+        "Curated Literature Map",
+        "Chunking And Parsing",
+        "Embedding And Vector Operations",
+        "Retrieval And Matching",
+        "Evaluation And Gold Sets",
+    ):
+        _require(heading in literature_curation, f"literature curation is missing {heading}")
+    _require("raw file names" in literature_curation, "literature curation should hide raw file names")
     for heading in (
         "Embedding Model",
         "Embedding Dimension",
