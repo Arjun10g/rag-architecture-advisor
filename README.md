@@ -17,6 +17,22 @@ Track A is this application: a Gradio app on Hugging Face Spaces, backed by a La
 
 Track B is what the app produces: selected RAG topology, linked pipeline and deployment views, Terraform module sketch, strengths/weaknesses, and the decision log.
 
+## Data Storage
+
+- Source documents are committed as markdown under `corpus/curated/`,
+  `corpus/report/`, and `corpus/routing/`.
+- `corpus/manifest.yaml` is the authoritative catalog. It stores document path,
+  namespace, domain, trust tier, tags, and ingest flags.
+- At app startup, `ingestion/build_index.py` reads the manifest and chunks the
+  markdown into an in-memory `FileChunkStore`; the default lexical retriever does
+  not require a persistent database.
+- Optional generated artifacts are ignored: `.cache/` for embedding/vector
+  caches, `corpus/index/` for future local indexes, and `eval/results/` for
+  ablation outputs.
+- Hugging Face Spaces receives the committed corpus and app files. GCP is only
+  used for heavier offline ablations, and temporary eval VMs are deleted after
+  use.
+
 ## Skeleton Status
 
 - `app.py` provides the Gradio entrypoint.
@@ -30,6 +46,7 @@ Track B is what the app produces: selected RAG topology, linked pipeline and dep
 
 ```bash
 python3 -m compileall app.py graph agents retrieval ingestion synth llm eval scripts
+python3 scripts/app_formatting_smoke.py
 python3 eval/harness.py --gate
 python3 eval/harness.py --gold eval/gold/v0_4_answer_quality.json --gate
 python3 -c "from graph.build import build_graph; s = build_graph().invoke({'user_brief': 'internal API docs assistant'}); print(s.domain_prior)"
