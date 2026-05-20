@@ -29,18 +29,26 @@ jobs:
         run: python scripts/topology_catalog_smoke.py
       - name: Terraform emit smoke test
         run: python scripts/terraform_emit_smoke.py
+      - name: Terraform export smoke test
+        run: python scripts/terraform_export_smoke.py
       - name: Retrieval smoke test
         run: python scripts/retrieval_smoke.py
       - name: Vector store smoke test
         run: python scripts/vector_store_smoke.py
+      - name: Vector index manifest smoke test
+        run: python scripts/vector_index_manifest_smoke.py
       - name: LLM provider smoke test
         run: python scripts/llm_provider_smoke.py
       - name: App formatting smoke test
         run: python scripts/app_formatting_smoke.py
+      - name: Audit log smoke test
+        run: python scripts/audit_log_smoke.py
       - name: Gold-set eval gate
         run: python eval/harness.py --gate
       - name: Answer-set eval gate
         run: python eval/harness.py --gold eval/gold/v0_4_answer_quality.json --gate
+      - name: Panel-quality eval gate
+        run: python eval/harness.py --gold eval/gold/v0_5_panel_quality.json --gate
       - name: Graph smoke test
         env:
           LLM_PROVIDER: disabled

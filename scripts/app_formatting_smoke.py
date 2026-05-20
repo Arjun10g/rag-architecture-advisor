@@ -25,9 +25,13 @@ def main() -> None:
         raise AssertionError("recommendation tab is missing selected topology")
     if "Retrieval Strategy" not in decisions:
         raise AssertionError("architecture tab is missing retrieval decision")
-    if not sources or len(sources[0]) != 6:
+    if "Accepted Tradeoff" not in decisions or "Reasoning Chunks" not in decisions:
+        raise AssertionError("architecture tab is missing detailed reasoning")
+    if not sources or len(sources[0]) != 5:
         raise AssertionError("source table rows are malformed")
-    if "Deployment Projection" not in deployment or "Vector database" not in deployment:
+    if not sources[0][-1]:
+        raise AssertionError("source table should show reasoning chunks instead of file paths")
+    if "flowchart LR" not in deployment or "Deployment Projection" not in deployment or "Vector database" not in deployment:
         raise AssertionError("deployment tab is missing projection details")
     if "terraform" not in terraform:
         raise AssertionError("terraform tab is missing sketch")
@@ -37,8 +41,22 @@ def main() -> None:
         raise AssertionError("trace tab is missing heading")
     if not raw.get("draft_output", {}).get("architecture_decisions"):
         raise AssertionError("raw trace is missing architecture decisions")
+    panel = raw.get("draft_output", {}).get("panel", {})
+    if not panel.get("items") or not panel.get("tradeoffs"):
+        raise AssertionError("panel is missing requirement-specific reasoning")
     if raw.get("draft_output", {}).get("generation", {}).get("status") != "fallback":
         raise AssertionError("deterministic smoke should use LLM fallback path")
+
+    unresolved = advise_detailed("We need a RAG system, but the domain is unknown.")
+    if "Pending Elicitation" not in unresolved[0]:
+        raise AssertionError("detailed response should surface pending elicitation")
+
+    resolved = advise_detailed(
+        "A clinical HIPAA assistant over PHI patient records asks to use an external API.",
+        conflict_resolution="preserve_compliance",
+    )
+    if "conflict:resolved:preserve_compliance" not in resolved[5]:
+        raise AssertionError("conflict resolution control was not passed into the graph")
 
     cleared = clear_detail_response()
     if cleared != ("", "", [], "", "", "", "", {}):

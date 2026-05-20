@@ -9,4 +9,4 @@ __pycache__/
 .mypy_cache/
 eval/results/
 corpus/index/
-
+infra/generated/

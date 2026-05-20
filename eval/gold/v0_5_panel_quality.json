@@ -1,0 +1,57 @@
+{
+  "version": "gold_v0_5_panel_quality",
+  "created": "2026-05-20",
+  "description": "Panel-level checks for requirement-specific strengths, weaknesses, tradeoffs, and reasoning chunks.",
+  "thresholds": {
+    "answer_topology_accuracy": 1.0,
+    "answer_panel_phrase_recall": 1.0,
+    "answer_panel_citation_coverage": 1.0,
+    "answer_evidence_chunk_recall": 1.0
+  },
+  "answer": [
+    {
+      "id": "panel_technical_docs_tradeoffs",
+      "scenario": "Build an internal API docs assistant over fast-moving SDK docs with strict citations, mixed markdown and code, strict latency, and high exact-match terminology needs.",
+      "expected_topology": "two_stage_hybrid_rerank",
+      "required_panel_phrases": [
+        "lexical sidecar",
+        "stale sdk",
+        "512d speed profile",
+        "source ids and reasoning chunks"
+      ],
+      "required_evidence_chunk_phrases": [
+        "retrieval"
+      ],
+      "min_panel_citation_coverage": 1.0
+    },
+    {
+      "id": "panel_banking_review_controls",
+      "scenario": "Build a banking compliance assistant over customer policy, PCI controls, KYC procedures, transaction runbooks, regulated personal data, mandatory auditability, and an approval gate before answers are released.",
+      "expected_topology": "two_stage_hybrid_rerank",
+      "required_panel_phrases": [
+        "acl-aware retrieval",
+        "review queue",
+        "controlled release",
+        "audit logging"
+      ],
+      "required_evidence_chunk_phrases": [
+        "retrieval"
+      ],
+      "min_panel_citation_coverage": 1.0
+    },
+    {
+      "id": "panel_unknown_domain_pending",
+      "scenario": "We need a RAG system, but the domain, document type, sensitivity, update cadence, and latency requirements are not known yet.",
+      "expected_topology": "two_stage_dense_rerank",
+      "required_panel_phrases": [
+        "provisional",
+        "attributes still need explicit user confirmation",
+        "fixed catalog"
+      ],
+      "required_evidence_chunk_phrases": [
+        "evaluation"
+      ],
+      "min_panel_citation_coverage": 1.0
+    }
+  ]
+}

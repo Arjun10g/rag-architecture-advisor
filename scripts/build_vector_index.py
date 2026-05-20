@@ -106,6 +106,18 @@ def main() -> None:
             sort_keys=True,
         )
     )
+    _write_manifest(
+        index_dir=Path(args.index_dir),
+        payload={
+            "backend": args.backend,
+            "index_dir": args.index_dir,
+            "table_base": args.table,
+            "model": args.model,
+            "native_dimension": args.native_dim,
+            "dimensions": dimensions,
+            "indexes": built_indexes,
+        },
+    )
 
 
 def _parse_dimensions(value: str) -> list[int]:
@@ -126,6 +138,14 @@ def _build_order(dimensions: list[int], native_dimension: int) -> list[int]:
             dimension for dimension in unique_dimensions if dimension != native_dimension
         ]
     return unique_dimensions
+
+
+def _write_manifest(index_dir: Path, payload: dict) -> None:
+    index_dir.mkdir(parents=True, exist_ok=True)
+    (index_dir / "vector_manifest.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

@@ -16,6 +16,8 @@ An agentic RAG architecture advisor that maps a user's situation to a defensible
 Track A is this application: a Gradio app on Hugging Face Spaces, backed by a LangGraph-style state machine, startup-built retrieval index, and bounded reflection.
 
 Track B is what the app produces: selected RAG topology, linked pipeline and deployment views, Terraform module sketch, strengths/weaknesses, and the decision log.
+The detailed UI also accepts follow-up answers for pending attributes and an
+explicit conflict-resolution value, then reruns the same graph with those values.
 
 ## Data Storage
 
@@ -54,17 +56,29 @@ python3 scripts/graph_flow_smoke.py
 python3 scripts/specialist_fanout_smoke.py
 python3 scripts/topology_catalog_smoke.py
 python3 scripts/terraform_emit_smoke.py
+python3 scripts/terraform_export_smoke.py
 python3 scripts/vector_store_smoke.py
+python3 scripts/vector_index_manifest_smoke.py
 python3 scripts/llm_provider_smoke.py
 python3 scripts/app_formatting_smoke.py
+python3 scripts/audit_log_smoke.py
 python3 eval/harness.py --gate
 python3 eval/harness.py --gold eval/gold/v0_4_answer_quality.json --gate
+python3 eval/harness.py --gold eval/gold/v0_5_panel_quality.json --gate
 LLM_PROVIDER=disabled python3 -c "from graph.build import build_graph; s = build_graph().invoke({'user_brief': 'internal API docs assistant'}); print(s.domain_prior)"
 ```
 
-The answer gate checks that final recommendations include structured architecture
-decisions, source IDs on each major claim, required source families, and citation
-coverage metrics.
+The answer and panel gates check that final recommendations include structured
+architecture decisions, detailed why/tradeoff/validation reasoning, reasoning
+chunks instead of file-path-only source display, required source families,
+citation coverage metrics, and requirement-specific strengths/weaknesses.
+
+Export the advisor's illustrative Terraform bundle to real files with:
+
+```bash
+python3 scripts/export_terraform.py --out infra/generated/latest
+python3 scripts/export_terraform.py --out infra/generated/latest --validate  # runs Terraform if installed
+```
 
 ## LLM Generation
 
@@ -84,6 +98,10 @@ Set `LLM_PROVIDER=disabled` for no-network deterministic output. If
 falls back to a deterministic generated summary and records the reason in
 `draft_output.generation`.
 
+Every response includes an `audit_record` in raw JSON. Set
+`ADVISOR_AUDIT_LOG_PATH=/path/to/advisor-audit.jsonl` to persist those records in
+deployment.
+
 ## Retrieval Modes
 
 The default `RETRIEVAL_MODE=lexical` path is dependency-light and used by CI. For
@@ -94,7 +112,9 @@ Use `VECTOR_STORE_BACKEND=memory` for quick local experiments. Use LanceDB for
 actual deployment or repeatable dense evaluation. The build command stores both
 1024- and 512-dimensional Matryoshka indexes by default as separate tables
 (`chunks_dim_1024` and `chunks_dim_512`), so switching `EMBEDDING_DIM` does not
-force a rebuild:
+force a rebuild. The build also writes
+`corpus/index/lancedb/vector_manifest.json` so deployment can verify which
+tables and dimensions are present:
 
 ```bash
 python3 scripts/build_vector_index.py --backend lancedb --dimensions 1024,512 --rebuild

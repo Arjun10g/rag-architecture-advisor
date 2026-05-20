@@ -33,6 +33,28 @@ DetailResponse = tuple[str, str, list[list[Any]], str, str, str, dict[str, Any]]
 ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
 
 
+def _source_ids_text(source_ids: list[str]) -> str:
+    return " ".join(f"`{source_id}`" for source_id in source_ids)
+
+
+def _parse_elicitation_answers(value: str | None) -> dict[str, str]:
+    if not value or not value.strip():
+        return {}
+    stripped = value.strip()
+    if stripped.startswith("{"):
+        parsed = json.loads(stripped)
+        return {str(key): str(item) for key, item in parsed.items() if str(item).strip()}
+
+    answers: dict[str, str] = {}
+    for line in stripped.splitlines():
+        if "=" not in line:
+            continue
+        key, answer = line.split("=", 1)
+        if key.strip() and answer.strip():
+            answers[key.strip()] = answer.strip()
+    return answers
+
+
 def _format_output(state: AdvisorState) -> str:
     output = state.draft_output or {}
     topology = output.get("topology", {})
@@ -71,9 +93,14 @@ def _format_output(state: AdvisorState) -> str:
             lines.append(f"- **{area}:** {choice}")
             if decision.get("rationale"):
                 lines.append(f"  {decision['rationale']}")
+            for step in decision.get("reasoning_steps") or []:
+                lines.append(f"  - {step}")
+            if decision.get("tradeoff"):
+                lines.append(f"  Tradeoff: {decision['tradeoff']}")
+            if decision.get("validation"):
+                lines.append(f"  Validate: {decision['validation']}")
             if source_ids:
-                citations = " ".join(f"`{source_id}`" for source_id in source_ids[:3])
-                lines.append(f"  Sources: {citations}")
+                lines.append(f"  Sources: {_source_ids_text(source_ids[:3])}")
 
     if terraform:
         lines.extend(["", "## Terraform Sketch", "```hcl", terraform.strip(), "```"])
@@ -89,6 +116,8 @@ def _format_output(state: AdvisorState) -> str:
             lines.append(f"- [{index}] {label} (`{source_id}`)")
             if used_by:
                 lines.append(f"  Used by: {used_by}")
+            if source.get("snippet"):
+                lines.append(f"  Reasoning chunk: {source['snippet']}")
 
     return "\n".join(lines)
 
@@ -127,6 +156,15 @@ def _format_recommendation(state: AdvisorState) -> str:
     for item in panel.get("weaknesses", []):
         lines.append(f"- {item}")
 
+    if panel.get("tradeoffs"):
+        lines.extend(["", "### Accepted Tradeoffs"])
+        for item in panel.get("tradeoffs", []):
+            source_ids = _source_ids_text(item.get("source_ids") or [])
+            citation = f" {source_ids}" if source_ids else ""
+            lines.append(
+                f"- **{item.get('attr')}:** {item.get('accepted_tradeoff')}{citation}"
+            )
+
     return "\n".join(line for line in lines if line is not None)
 
 
@@ -141,10 +179,25 @@ def _format_architecture_decisions(state: AdvisorState) -> str:
         lines.append(f"### {area}")
         lines.append(str(decision.get("choice") or "Pending"))
         if decision.get("rationale"):
-            lines.extend(["", str(decision["rationale"])])
+            lines.extend(["", "**Why:**", str(decision["rationale"])])
+        if decision.get("reasoning_steps"):
+            lines.extend(["", "**Reasoning:**"])
+            for step in decision["reasoning_steps"]:
+                lines.append(f"- {step}")
+        if decision.get("tradeoff"):
+            lines.extend(["", "**Accepted Tradeoff:**", str(decision["tradeoff"])])
+        if decision.get("validation"):
+            lines.extend(["", "**Validation Gate:**", str(decision["validation"])])
         source_ids = decision.get("source_ids") or []
         if source_ids:
-            lines.extend(["", "**Sources:** " + " ".join(f"`{source_id}`" for source_id in source_ids)])
+            lines.extend(["", "**Source IDs:** " + _source_ids_text(source_ids)])
+        evidence_chunks = decision.get("evidence_chunks") or []
+        if evidence_chunks:
+            lines.extend(["", "**Reasoning Chunks:**"])
+            for chunk in evidence_chunks:
+                lines.append(
+                    f"- `{chunk.get('source_id')}`: {chunk.get('reasoning_chunk') or chunk.get('snippet') or ''}"
+                )
         lines.append("")
     return "\n".join(lines).strip()
 
@@ -157,10 +210,9 @@ def _source_rows(state: AdvisorState) -> list[list[Any]]:
             [
                 index,
                 ", ".join(source.get("used_by") or []),
-                source.get("title") or "",
                 source.get("section") or "",
                 source.get("source_id") or "",
-                source.get("source_path") or "",
+                source.get("snippet") or "",
             ]
         )
     return rows
@@ -172,7 +224,26 @@ def _format_deployment(state: AdvisorState) -> str:
     deployment_components = projection.get("deployment_components") or []
     projection_edges = projection.get("projection_edges") or []
 
-    lines = ["## Pipeline"]
+    lines = ["## Diagram", "```mermaid", "flowchart LR"]
+    if pipeline_nodes:
+        lines.append("  subgraph pipeline[Pipeline]")
+        for node in pipeline_nodes:
+            node_id = str(node.get("id") or "").replace("-", "_")
+            label = str(node.get("label") or node.get("id") or "")
+            lines.append(f"    {node_id}[{label}]")
+        lines.append("  end")
+    if deployment_components:
+        lines.append("  subgraph deployment[Deployment]")
+        for component in deployment_components:
+            component_id = str(component.get("id") or "").replace("-", "_")
+            label = str(component.get("label") or component.get("id") or "")
+            lines.append(f"    {component_id}[{label}]")
+        lines.append("  end")
+    for edge in projection_edges[:40]:
+        source = str(edge.get("from") or "").replace("-", "_")
+        target = str(edge.get("to") or "").replace("-", "_")
+        lines.append(f"  {source} -.-> {target}")
+    lines.extend(["```", "", "## Pipeline"])
     for node in pipeline_nodes:
         lines.append(f"{node.get('order')}. **{node.get('label')}** (`{node.get('id')}`)")
 
@@ -246,12 +317,20 @@ def advise(user_brief: str) -> tuple[str, dict[str, Any]]:
 
 def advise_detailed(
     user_brief: str,
+    elicitation_answers: str | None = None,
+    conflict_resolution: str | None = None,
 ) -> DetailResponse:
     if not user_brief.strip():
         return _empty_detail_response("Enter a brief to generate an initial advisor trace.")
 
     graph = build_graph()
-    state = graph.invoke({"user_brief": user_brief})
+    state = graph.invoke(
+        {
+            "user_brief": user_brief,
+            "elicitation_answers": _parse_elicitation_answers(elicitation_answers),
+            "conflict_resolution": (conflict_resolution or "").strip() or None,
+        }
+    )
     return (
         _format_recommendation(state),
         _format_architecture_decisions(state),
@@ -271,6 +350,17 @@ def build_demo():
         gr.Markdown("# RAG Architecture Advisor")
         with gr.Row():
             brief = gr.Textbox(label="Brief", lines=8, placeholder="Describe the RAG use case...")
+        with gr.Accordion("Follow-up answers", open=False):
+            elicitation_answers = gr.Textbox(
+                label="Elicitation answers",
+                lines=4,
+                placeholder='JSON like {"A7": "periodic"} or lines like A7=periodic',
+            )
+            conflict_resolution = gr.Textbox(
+                label="Conflict resolution",
+                lines=2,
+                placeholder="Example: preserve_compliance",
+            )
         with gr.Row():
             run = gr.Button("Advise", variant="primary")
             clear = gr.Button("Clear")
@@ -283,10 +373,10 @@ def build_demo():
                 decisions = gr.Markdown(label="Architecture Decisions")
             with gr.Tab("Sources"):
                 sources = gr.Dataframe(
-                    headers=["#", "Used By", "Title", "Section", "Source ID", "Path"],
-                    datatype=["number", "str", "str", "str", "str", "str"],
+                    headers=["#", "Used By", "Section", "Source ID", "Reasoning Chunk"],
+                    datatype=["number", "str", "str", "str", "str"],
                     interactive=False,
-                    label="Sources",
+                    label="Reasoning Chunks",
                 )
             with gr.Tab("Deployment"):
                 deployment = gr.Markdown(label="Deployment Projection")
@@ -298,7 +388,11 @@ def build_demo():
                 raw_trace = gr.JSON(label="Raw Trace")
 
         outputs = [recommendation, decisions, sources, deployment, terraform, trace, raw_trace]
-        run.click(fn=advise_detailed, inputs=brief, outputs=outputs)
+        run.click(
+            fn=advise_detailed,
+            inputs=[brief, elicitation_answers, conflict_resolution],
+            outputs=outputs,
+        )
         clear.click(fn=clear_detail_response, inputs=None, outputs=[brief, *outputs])
     return demo
 

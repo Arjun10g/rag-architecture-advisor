@@ -70,6 +70,7 @@ def main() -> None:
     parser.add_argument(
         "--rebuild", action="store_true", help="Ignore cached embeddings and rebuild."
     )
+    parser.add_argument("--out", default="", help="Optional JSON output path.")
     parser.add_argument(
         "--fail-on-skip", action="store_true", help="Exit non-zero if embeddings are unavailable."
     )
@@ -120,24 +121,28 @@ def main() -> None:
             reason=str(exc),
         )
         print(json.dumps(payload, indent=2, sort_keys=True))
+        if args.out:
+            out_path = Path(args.out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         if args.fail_on_skip:
             raise SystemExit(2) from exc
         return
 
-    print(
-        json.dumps(
-            _report_payload(
-                status="ok",
-                model=args.model,
-                gold=args.gold,
-                dimensions=dimensions,
-                modes=modes,
-                results=results,
-            ),
-            indent=2,
-            sort_keys=True,
-        )
+    payload = _report_payload(
+        status="ok",
+        model=args.model,
+        gold=args.gold,
+        dimensions=dimensions,
+        modes=modes,
+        results=results,
     )
+    output = json.dumps(payload, indent=2, sort_keys=True)
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(output + "\n", encoding="utf-8")
+    print(output)
 
 
 if __name__ == "__main__":

@@ -88,6 +88,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--cache-dir", default=".cache/embeddings")
     parser.add_argument("--rebuild", action="store_true")
+    parser.add_argument("--out", default="", help="Optional JSON output path.")
     parser.add_argument("--fail-on-skip", action="store_true")
     args = parser.parse_args()
 
@@ -146,21 +147,21 @@ def main() -> None:
                 if args.fail_on_skip:
                     raise SystemExit(2) from exc
 
-    print(
-        json.dumps(
-            {
-                "status": "ok",
-                "embedding_model": args.model,
-                "colbert_model": args.colbert_model,
-                "gold": gold_paths,
-                "strategies": strategies,
-                "dimensions": dimensions,
-                "results": results,
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
+    payload = {
+        "status": "ok",
+        "embedding_model": args.model,
+        "colbert_model": args.colbert_model,
+        "gold": gold_paths,
+        "strategies": strategies,
+        "dimensions": dimensions,
+        "results": results,
+    }
+    output = json.dumps(payload, indent=2, sort_keys=True)
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(output + "\n", encoding="utf-8")
+    print(output)
 
 
 if __name__ == "__main__":

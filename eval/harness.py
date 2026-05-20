@@ -358,6 +358,20 @@ def _decision_by_area(output: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _panel_text(output: dict[str, Any]) -> str:
+    panel = output.get("panel") or {}
+    return json.dumps(panel, sort_keys=True).lower()
+
+
+def _evidence_chunk_text(output: dict[str, Any]) -> str:
+    chunks = []
+    for decision in output.get("architecture_decisions", []):
+        chunks.extend(decision.get("evidence_chunks") or [])
+    for item in (output.get("panel") or {}).get("items", []):
+        chunks.extend(item.get("evidence_chunks") or [])
+    return json.dumps(chunks, sort_keys=True).lower()
+
+
 def _source_matches(source: dict[str, Any], expected: dict[str, Any]) -> bool:
     path = str(source.get("source_path") or "").lower()
     section = str(source.get("section") or "").lower()
@@ -384,6 +398,7 @@ def _score_answer_item(
     decisions = output.get("architecture_decisions", [])
     decisions_by_area = _decision_by_area(output)
     sources = output.get("sources", [])
+    panel_items = (output.get("panel") or {}).get("items", [])
 
     expected_topology = item.get("expected_topology")
     actual_topology = (output.get("topology") or {}).get("key")
@@ -421,6 +436,27 @@ def _score_answer_item(
     citation_coverage = len(cited_decisions) / len(decisions) if decisions else 0.0
     min_citation_coverage = float(item.get("min_citation_coverage", 1.0))
 
+    panel_phrase_checks = item.get("required_panel_phrases") or []
+    panel_text = _panel_text(output)
+    panel_phrase_hits = [
+        phrase for phrase in panel_phrase_checks if str(phrase).lower() in panel_text
+    ]
+    panel_phrase_recall = (
+        len(panel_phrase_hits) / len(panel_phrase_checks) if panel_phrase_checks else 1.0
+    )
+    panel_cited = [panel_item for panel_item in panel_items if panel_item.get("source_ids")]
+    panel_citation_coverage = len(panel_cited) / len(panel_items) if panel_items else 0.0
+    min_panel_citation_coverage = float(item.get("min_panel_citation_coverage", 0.0))
+
+    evidence_chunk_checks = item.get("required_evidence_chunk_phrases") or []
+    evidence_chunk_text = _evidence_chunk_text(output)
+    evidence_chunk_hits = [
+        phrase for phrase in evidence_chunk_checks if str(phrase).lower() in evidence_chunk_text
+    ]
+    evidence_chunk_recall = (
+        len(evidence_chunk_hits) / len(evidence_chunk_checks) if evidence_chunk_checks else 1.0
+    )
+
     failure = None
     if (
         topology_score < 1.0
@@ -428,6 +464,9 @@ def _score_answer_item(
         or phrase_recall < 1.0
         or source_recall < 1.0
         or citation_coverage < min_citation_coverage
+        or panel_phrase_recall < 1.0
+        or panel_citation_coverage < min_panel_citation_coverage
+        or evidence_chunk_recall < 1.0
     ):
         failure = {
             "axis": "answer",
@@ -438,6 +477,11 @@ def _score_answer_item(
             "missing_decision_phrases": missing_phrases,
             "source_recall": source_recall,
             "citation_coverage": citation_coverage,
+            "missing_panel_phrases": sorted(set(panel_phrase_checks) - set(panel_phrase_hits)),
+            "panel_citation_coverage": panel_citation_coverage,
+            "missing_evidence_chunk_phrases": sorted(
+                set(evidence_chunk_checks) - set(evidence_chunk_hits)
+            ),
         }
 
     return (
@@ -447,11 +491,16 @@ def _score_answer_item(
             "decision_phrase_recall": phrase_recall,
             "source_recall": source_recall,
             "citation_coverage": citation_coverage,
+            "panel_phrase_recall": panel_phrase_recall,
+            "panel_citation_coverage": panel_citation_coverage,
+            "evidence_chunk_recall": evidence_chunk_recall,
             "latency_ms": latency_ms,
         },
         {
             "answer_decisions_total": len(decisions),
             "answer_decisions_cited": len(cited_decisions),
+            "answer_panel_items_total": len(panel_items),
+            "answer_panel_items_cited": len(panel_cited),
         },
         failure,
     )
@@ -462,7 +511,12 @@ def _score_answers(
     answer_fn: AnswerFn | None = None,
 ) -> tuple[dict[str, float], dict[str, int], list[dict[str, Any]]]:
     scores = []
-    counts = {"answer_decisions_total": 0, "answer_decisions_cited": 0}
+    counts = {
+        "answer_decisions_total": 0,
+        "answer_decisions_cited": 0,
+        "answer_panel_items_total": 0,
+        "answer_panel_items_cited": 0,
+    }
     failures = []
     scorer = answer_fn or _default_answer
     for item in items:
@@ -483,6 +537,13 @@ def _score_answers(
         ),
         "answer_source_recall": _mean([score["source_recall"] for score in scores]),
         "answer_citation_coverage": _mean([score["citation_coverage"] for score in scores]),
+        "answer_panel_phrase_recall": _mean([score["panel_phrase_recall"] for score in scores]),
+        "answer_panel_citation_coverage": _mean(
+            [score["panel_citation_coverage"] for score in scores]
+        ),
+        "answer_evidence_chunk_recall": _mean(
+            [score["evidence_chunk_recall"] for score in scores]
+        ),
         **_latency_metrics("answer", [score["latency_ms"] for score in scores]),
     }
     return metrics, counts, failures
