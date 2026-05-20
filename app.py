@@ -2030,4 +2030,5 @@ if __name__ == "__main__":
             server_port=int(os.getenv("GRADIO_SERVER_PORT", "7860")),
             share=os.getenv("GRADIO_SHARE", "false").lower() == "true",
             auth=_launch_auth_credentials(),
+            ssr_mode=False,
         )
