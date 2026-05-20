@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from agents.critic import critique
 from agents.intake_router import resolve_requirements
+from agents.research_agents import run_research_agents
 from agents.specialists import run_specialists
 from agents.synthesizer import synthesize
 from graph.state import AdvisorState, DecisionLogEntry
@@ -48,6 +49,16 @@ def specialist_node(state: AdvisorState) -> AdvisorState:
     state.graph_trace.append("specialists:start")
     state.agent_findings = run_specialists(state)
     state.graph_trace.append("specialists:complete")
+    return state
+
+
+def research_node(state: AdvisorState) -> AdvisorState:
+    if not state.deep_thinking:
+        state.graph_trace.append("research:skipped")
+        return state
+    state.graph_trace.append("research:start")
+    state.research_findings = run_research_agents(state)
+    state.graph_trace.append("research:complete")
     return state
 
 

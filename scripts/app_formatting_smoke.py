@@ -20,7 +20,7 @@ def main() -> None:
     if not trace.get("draft_output", {}).get("sources"):
         raise AssertionError("legacy trace is missing sources")
 
-    recommendation, decisions, sources, deployment, terraform, decision_trace, raw = advise_detailed(brief)
+    recommendation, decisions, sources, deployment, terraform, decision_trace, research, raw = advise_detailed(brief)
     if "Two-stage hybrid" not in recommendation:
         raise AssertionError("recommendation tab is missing selected topology")
     if "Retrieval Strategy" not in decisions:
@@ -43,6 +43,8 @@ def main() -> None:
         raise AssertionError("terraform sketch is missing module tree output")
     if "Advisor Reasoning Trace" not in decision_trace or "Read the literature chunks" not in decision_trace:
         raise AssertionError("trace tab is missing literature-grounded reasoning")
+    if "Deep thinking is disabled" not in research:
+        raise AssertionError("research tab should explain when deep thinking is disabled")
     visible_output = "\n".join([recommendation, decisions, deployment, decision_trace])
     forbidden = ["corpus_", "router:start", "Graph Trace", "Requirement Vector", "two_stage_hybrid_rerank", "retrieval_strategy"]
     if any(token in visible_output for token in forbidden):
@@ -66,6 +68,22 @@ def main() -> None:
     if not public.get("reasoning_chunks") or not public.get("advisor_reasoning_trace"):
         raise AssertionError("public API response is missing advisor reasoning fields")
 
+    deep_public = advise_api(brief, deep_thinking=True)
+    if not deep_public.get("deep_thinking"):
+        raise AssertionError("public API did not preserve deep-thinking mode")
+    if not deep_public.get("research_links"):
+        raise AssertionError("deep-thinking API response should include research links")
+    if not any("github.com" in str(link.get("url")) for link in deep_public["research_links"]):
+        raise AssertionError("deep-thinking research links should include community GitHub references")
+    if not any("huggingface.co" in str(link.get("url")) for link in deep_public["research_links"]):
+        raise AssertionError("deep-thinking research links should include Hugging Face references")
+
+    deep_detailed = advise_detailed(brief, deep_thinking=True)
+    if "Deep Research Agents" not in deep_detailed[6]:
+        raise AssertionError("research tab should render deep-thinking agent findings")
+    if "Ran deep research agents" not in deep_detailed[5]:
+        raise AssertionError("trace tab should include the deep-thinking agent step")
+
     unresolved = advise_detailed("We need a RAG system, but the domain is unknown.")
     if "Questions To Confirm" not in unresolved[0]:
         raise AssertionError("detailed response should surface pending elicitation")
@@ -74,11 +92,11 @@ def main() -> None:
         "A clinical HIPAA assistant over PHI patient records asks to use an external API.",
         conflict_resolution="preserve_compliance",
     )
-    if "conflict:resolved:preserve_compliance" not in resolved[6].get("graph_trace", []):
+    if "conflict:resolved:preserve_compliance" not in resolved[7].get("graph_trace", []):
         raise AssertionError("conflict resolution control was not passed into the graph")
 
     cleared = clear_detail_response()
-    if cleared != ("", "", [], "", "", "", "", {}):
+    if cleared != ("", "", [], "", "", "", "", "", {}):
         raise AssertionError("clear response shape changed")
 
     print(f"sources={len(sources)} domain={raw['domain_prior']}")

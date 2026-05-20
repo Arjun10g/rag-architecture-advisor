@@ -31,6 +31,7 @@ def _source_ref(result: SearchResult) -> SourceRef:
         score=round(result.score, 6),
         element_type=str(chunk.metadata.get("element_type") or ""),
         snippet=_snippet(chunk.text_original),
+        url=chunk.metadata.get("source_url"),
     )
 
 

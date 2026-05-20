@@ -19,6 +19,13 @@ Track B is what the app produces: selected RAG topology, linked pipeline and dep
 The detailed UI also accepts follow-up answers for pending attributes and an
 explicit conflict-resolution value, then reruns the same graph with those values.
 
+Deep-thinking mode adds a parallel research pass before synthesis. It runs four
+agent roles over the local literature corpus and curated public references:
+literature review, agent-framework review, community implementation review, and
+Hugging Face/Spaces review. When enabled, the UI shows a Research tab with
+paper, docs, GitHub, Medium, and Hugging Face links; the public API returns the
+same links without raw corpus IDs or file paths.
+
 ## Data Storage
 
 - Source documents are committed as markdown under `corpus/curated/`,
@@ -42,7 +49,7 @@ explicit conflict-resolution value, then reruns the same graph with those values
 
 - `app.py` provides the Gradio entrypoint.
 - `graph/` contains the typed state and graph runner.
-- `agents/` contains router, specialist, synthesizer, and critic stubs.
+- `agents/` contains router, specialist, deep-research, synthesizer, and critic stubs.
 - `retrieval/` and `ingestion/` contain the P1/P2 ingestion and retrieval placeholders.
 - `synth/` contains the topology, projection, Terraform, and panel placeholders.
 - `corpus/` is the target normalized corpus layout for P1.
@@ -53,6 +60,7 @@ explicit conflict-resolution value, then reruns the same graph with those values
 python3 -m compileall app.py graph agents retrieval ingestion synth llm eval scripts
 python3 scripts/router_state_smoke.py
 python3 scripts/graph_flow_smoke.py
+python3 scripts/deep_research_smoke.py
 python3 scripts/specialist_fanout_smoke.py
 python3 scripts/topology_catalog_smoke.py
 python3 scripts/terraform_emit_smoke.py
@@ -117,6 +125,7 @@ graph state:
 
 ```bash
 python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --runs 3
+python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --deep-thinking
 ```
 
 The detailed UI/debug response includes an `audit_record` in raw JSON. Set
@@ -131,6 +140,7 @@ are configured. Before treating an environment as production, run:
 ```bash
 python3 scripts/production_readiness_check.py --profile production
 python3 scripts/api_output_probe.py --url https://<space-or-host>/ --runs 5
+python3 scripts/api_output_probe.py --url https://<space-or-host>/ --deep-thinking
 python3 scripts/hf_generation_probe.py
 ```
 
@@ -145,6 +155,9 @@ Production settings to verify:
 - Set `ADVISOR_AUDIT_LOG_PATH` to a persistent log sink or mounted volume.
 - For dense/hybrid production retrieval, build and mount the LanceDB index with
   both 1024 and 512 dimensional tables, then set `VECTOR_STORE_BACKEND=lancedb`.
+- Keep the deep-thinking smoke green before launch. It checks that the parallel
+  research agents return literature, framework, GitHub, Medium, and Hugging Face
+  references without exposing internal source identifiers.
 
 ## Retrieval Modes
 

@@ -31,8 +31,8 @@ EXAMPLE_BRIEFS = [
     "We need a RAG system, but the domain, document type, sensitivity, update cadence, and latency requirements are not known yet.",
 ]
 
-DetailResponse = tuple[str, str, list[list[Any]], str, str, str, dict[str, Any]]
-ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
+DetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
+ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, str, dict[str, Any]]
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -303,6 +303,35 @@ def _public_generation_status(raw_trace: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _public_research_links(raw_trace: dict[str, Any]) -> list[dict[str, Any]]:
+    links = (raw_trace.get("draft_output", {}) or {}).get("research_links") or []
+    return [
+        {
+            "agent": link.get("agent"),
+            "label": link.get("label"),
+            "url": link.get("url"),
+            "source_type": link.get("source_type"),
+            "relevance": link.get("relevance"),
+        }
+        for link in links
+        if str(link.get("url") or "").startswith("http")
+    ]
+
+
+def _public_research_findings(raw_trace: dict[str, Any]) -> list[dict[str, Any]]:
+    findings = (raw_trace.get("draft_output", {}) or {}).get("research_findings") or []
+    return [
+        {
+            "agent": finding.get("agent"),
+            "summary": finding.get("summary"),
+            "status": finding.get("status"),
+            "duration_ms": finding.get("duration_ms"),
+            "link_count": len(finding.get("links") or []),
+        }
+        for finding in findings
+    ]
+
+
 def _format_deployment(state: AdvisorState) -> str:
     projection = (state.draft_output or {}).get("projection") or {}
     pipeline_nodes = projection.get("pipeline_nodes") or []
@@ -441,6 +470,15 @@ def _format_trace(state: AdvisorState) -> str:
                 f"- **{item.get('label')}:** {item.get('accepted_tradeoff')}{evidence}"
             )
 
+    research_findings = (output.get("research_findings") or []) if output else []
+    if state.deep_thinking and research_findings:
+        lines.extend(["", "### 7. Ran deep research agents"])
+        for finding in research_findings:
+            lines.append(
+                f"- **{finding.get('agent')}:** {finding.get('summary')} "
+                f"(status: {finding.get('status')})"
+            )
+
     if state.conflict:
         lines.extend(["", "### Unresolved conflict"])
         lines.append(state.conflict.rationale)
@@ -456,6 +494,41 @@ def _format_trace(state: AdvisorState) -> str:
     return "\n".join(lines)
 
 
+def _format_research(state: AdvisorState) -> str:
+    output = state.draft_output or {}
+    findings = output.get("research_findings") or []
+    if not state.deep_thinking:
+        return "Deep thinking is disabled for this run."
+    if not findings:
+        return "Deep thinking was enabled, but no research findings were returned."
+
+    lines = ["## Deep Research Agents"]
+    for finding in findings:
+        lines.append(f"### {str(finding.get('agent') or 'research').replace('_', ' ').title()}")
+        lines.append(str(finding.get("summary") or "No summary returned."))
+        lines.append(f"Status: `{finding.get('status')}` - Duration: `{finding.get('duration_ms')} ms`")
+        links = finding.get("links") or []
+        if links:
+            lines.append("")
+            lines.append("Links:")
+            for link in links[:8]:
+                label = str(link.get("label") or link.get("url") or "Source")
+                url = str(link.get("url") or "")
+                source_type = str(link.get("source_type") or "web")
+                relevance = str(link.get("relevance") or "")
+                lines.append(f"- [{label}]({url}) - `{source_type}`")
+                if relevance:
+                    lines.append(f"  {relevance}")
+        subqueries = finding.get("subqueries") or []
+        if subqueries:
+            lines.append("")
+            lines.append("Subqueries:")
+            for query in subqueries[:6]:
+                lines.append(f"- {query}")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
 def _terraform(state: AdvisorState) -> str:
     return str((state.draft_output or {}).get("terraform") or "")
 
@@ -463,11 +536,11 @@ def _terraform(state: AdvisorState) -> str:
 def _empty_detail_response(
     message: str,
 ) -> DetailResponse:
-    return message, "", [], "", "", "", {}
+    return message, "", [], "", "", "", "", {}
 
 
 def clear_detail_response() -> ClearDetailResponse:
-    return "", "", [], "", "", "", "", {}
+    return "", "", [], "", "", "", "", "", {}
 
 
 def advise(user_brief: str) -> tuple[str, dict[str, Any]]:
@@ -483,6 +556,7 @@ def advise_detailed(
     user_brief: str,
     elicitation_answers: str | None = None,
     conflict_resolution: str | None = None,
+    deep_thinking: bool = False,
 ) -> DetailResponse:
     if not user_brief.strip():
         return _empty_detail_response("Enter a brief to generate an initial advisor trace.")
@@ -493,6 +567,7 @@ def advise_detailed(
             "user_brief": user_brief,
             "elicitation_answers": _parse_elicitation_answers(elicitation_answers),
             "conflict_resolution": (conflict_resolution or "").strip() or None,
+            "deep_thinking": deep_thinking,
         }
     )
     return (
@@ -502,6 +577,7 @@ def advise_detailed(
         _format_deployment(state),
         _terraform(state),
         _format_trace(state),
+        _format_research(state),
         state.to_dict(),
     )
 
@@ -510,6 +586,7 @@ def advise_api(
     user_brief: str,
     elicitation_answers: str | None = None,
     conflict_resolution: str | None = None,
+    deep_thinking: bool = False,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     (
@@ -519,8 +596,9 @@ def advise_api(
         deployment_projection,
         terraform_sketch,
         advisor_reasoning_trace,
+        research,
         raw_trace,
-    ) = advise_detailed(user_brief, elicitation_answers, conflict_resolution)
+    ) = advise_detailed(user_brief, elicitation_answers, conflict_resolution, deep_thinking)
     topology = raw_trace.get("draft_output", {}).get("topology") or {}
     return {
         "topology": topology.get("name"),
@@ -530,6 +608,10 @@ def advise_api(
         "deployment_projection": deployment_projection,
         "terraform_sketch": terraform_sketch,
         "advisor_reasoning_trace": advisor_reasoning_trace,
+        "deep_thinking": bool(raw_trace.get("deep_thinking")),
+        "research": research,
+        "research_findings": _public_research_findings(raw_trace),
+        "research_links": _public_research_links(raw_trace),
         "pending_questions": [
             ATTRIBUTE_LABELS.get(attr, attr)
             for attr in raw_trace.get("pending_elicitation", [])
@@ -561,6 +643,11 @@ def build_demo():
                 lines=2,
                 placeholder="Example: preserve_compliance",
             )
+            deep_thinking = gr.Checkbox(
+                label="Deep thinking",
+                value=False,
+                info="Run parallel research agents over literature, agent libraries, GitHub, Medium, and Hugging Face references.",
+            )
         with gr.Row():
             run = gr.Button("Advise", variant="primary")
             clear = gr.Button("Clear")
@@ -584,6 +671,8 @@ def build_demo():
                 terraform = gr.Textbox(label="Terraform Sketch", lines=18)
             with gr.Tab("Trace"):
                 trace = gr.Markdown(label="Advisor Reasoning Trace")
+            with gr.Tab("Research"):
+                research = gr.Markdown(label="Deep Research Links")
             if show_raw_trace:
                 with gr.Tab("Raw JSON"):
                     raw_trace = gr.JSON(label="Raw Trace")
@@ -592,10 +681,10 @@ def build_demo():
         public_api_payload = gr.JSON(label="Public API Response", visible=False)
         public_api_trigger = gr.Button("Public API", visible=False)
 
-        outputs = [recommendation, decisions, sources, deployment, terraform, trace, raw_trace]
+        outputs = [recommendation, decisions, sources, deployment, terraform, trace, research, raw_trace]
         run.click(
             fn=advise_detailed,
-            inputs=[brief, elicitation_answers, conflict_resolution],
+            inputs=[brief, elicitation_answers, conflict_resolution, deep_thinking],
             outputs=outputs,
             api_name="advise_detailed",
             api_visibility="private",
@@ -609,7 +698,7 @@ def build_demo():
         )
         public_api_trigger.click(
             fn=advise_api,
-            inputs=[brief, elicitation_answers, conflict_resolution],
+            inputs=[brief, elicitation_answers, conflict_resolution, deep_thinking],
             outputs=public_api_payload,
             api_name="advise",
             api_description="Return the public advisor response without raw graph internals.",

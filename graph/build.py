@@ -6,6 +6,7 @@ from graph.nodes import (
     critic_node,
     elicitation_node,
     revise_node,
+    research_node,
     router_node,
     specialist_node,
     synthesizer_node,
@@ -27,6 +28,7 @@ class AdvisorGraph:
             state = conflict_node(state)
 
         state = specialist_node(state)
+        state = research_node(state)
         state = synthesizer_node(state)
         state = critic_node(state)
         while should_reflect(state.critique, state.loop_count):

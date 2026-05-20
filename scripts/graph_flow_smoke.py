@@ -48,10 +48,24 @@ def main() -> None:
     if resolved.conflict is not None:
         raise AssertionError("resolved conflict should be cleared")
 
+    deep = graph.invoke(
+        {
+            "user_brief": "Build an internal API docs assistant over fast-moving SDK docs.",
+            "deep_thinking": True,
+        }
+    )
+    if "research:start" not in deep.graph_trace or "research:complete" not in deep.graph_trace:
+        raise AssertionError("deep-thinking path did not run research agents")
+    if not deep.research_findings:
+        raise AssertionError("deep-thinking path did not retain research findings")
+    if not (deep.draft_output or {}).get("research_links"):
+        raise AssertionError("deep-thinking path did not expose research links")
+
     print(
         "graph_flow_smoke=ok "
         f"unknown_trace={len(unknown.graph_trace)} "
-        f"resolved_trace={len(resolved.graph_trace)}"
+        f"resolved_trace={len(resolved.graph_trace)} "
+        f"deep_agents={len(deep.research_findings)}"
     )
 
 

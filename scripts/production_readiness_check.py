@@ -17,15 +17,21 @@ except ImportError:  # pragma: no cover - optional local convenience.
 
 from app import advise_api
 from llm.provider import DEFAULT_HF_INFERENCE_MODEL
-from scripts.api_output_probe import DEFAULT_BRIEF, _validate_public_payload
+from scripts.api_output_probe import (
+    DEFAULT_BRIEF,
+    _validate_deep_research_payload,
+    _validate_public_payload,
+)
 
 
 REQUIRED_FILES = (
     "app.py",
     "README.md",
     ".env.example",
+    "agents/research_agents.py",
     "corpus/manifest.yaml",
     "scripts/api_output_probe.py",
+    "scripts/deep_research_smoke.py",
     "scripts/hf_generation_probe.py",
     "eval/gold/v0_2_expanded.json",
     "eval/gold/v0_4_answer_quality.json",
@@ -67,12 +73,21 @@ def _validate_direct_public_api() -> tuple[bool, str]:
     try:
         payload = advise_api(DEFAULT_BRIEF)
         summary = _validate_public_payload(payload)
+        deep_payload = advise_api(DEFAULT_BRIEF, deep_thinking=True)
+        deep_summary = _validate_public_payload(deep_payload)
+        _validate_deep_research_payload(deep_payload)
     finally:
         if previous is None:
             os.environ.pop("LLM_PROVIDER", None)
         else:
             os.environ["LLM_PROVIDER"] = previous
-    return True, f"topology={summary['topology']} chunks={summary['reasoning_chunks']}"
+    return (
+        True,
+        (
+            f"topology={summary['topology']} chunks={summary['reasoning_chunks']} "
+            f"deep_links={deep_summary['research_links']}"
+        ),
+    )
 
 
 def main() -> None:

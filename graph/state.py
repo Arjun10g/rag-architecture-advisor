@@ -41,6 +41,7 @@ class SourceRef:
     score: float
     snippet: str = ""
     element_type: str = ""
+    url: str | None = None
 
 
 @dataclass
@@ -51,6 +52,27 @@ class Finding:
     open_questions: list[str] = field(default_factory=list)
     source_ids: list[str] = field(default_factory=list)
     sources: list[SourceRef] = field(default_factory=list)
+
+
+@dataclass
+class ResearchLink:
+    label: str
+    url: str
+    source_type: str
+    relevance: str
+    agent: str = ""
+
+
+@dataclass
+class ResearchFinding:
+    agent: str
+    summary: str
+    status: str = "ok"
+    subqueries: list[str] = field(default_factory=list)
+    links: list[ResearchLink] = field(default_factory=list)
+    source_ids: list[str] = field(default_factory=list)
+    sources: list[SourceRef] = field(default_factory=list)
+    duration_ms: float = 0.0
 
 
 @dataclass
@@ -66,8 +88,10 @@ class AdvisorState:
     elicitation_answers: dict[str, str] = field(default_factory=dict)
     conflict: ConflictSet | None = None
     conflict_resolution: str | None = None
+    deep_thinking: bool = False
     hard_constraints: list[str] = field(default_factory=list)
     agent_findings: dict[str, Finding] = field(default_factory=dict)
+    research_findings: dict[str, ResearchFinding] = field(default_factory=dict)
     draft_output: dict[str, Any] | None = None
     critique: list[str] = field(default_factory=list)
     loop_count: int = 0
@@ -82,7 +106,16 @@ class AdvisorState:
             domain_prior=value.get("domain_prior"),
             elicitation_answers=dict(value.get("elicitation_answers") or {}),
             conflict_resolution=value.get("conflict_resolution"),
+            deep_thinking=_boolish(value.get("deep_thinking", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _boolish(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower().strip() in {"1", "true", "yes", "on"}
+    return bool(value)

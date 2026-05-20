@@ -82,6 +82,7 @@ def _predict(args: argparse.Namespace) -> dict[str, Any]:
         user_brief=args.brief,
         elicitation_answers=args.elicitation_answers,
         conflict_resolution=args.conflict_resolution,
+        deep_thinking=args.deep_thinking,
         api_name=args.endpoint,
     )
     _require(isinstance(result, dict), "public API should return one JSON object")
@@ -127,6 +128,37 @@ def _validate_chunks(chunks: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _validate_deep_research_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    _require(payload.get("deep_thinking") is True, "deep-thinking flag was not preserved")
+    research = str(payload.get("research") or "")
+    findings = payload.get("research_findings")
+    links = payload.get("research_links")
+    _require("Deep Research Agents" in research, "research tab output is missing agent summaries")
+    _require(isinstance(findings, list) and findings, "deep-thinking findings should be non-empty")
+    _require(isinstance(links, list) and links, "deep-thinking links should be non-empty")
+
+    agents = {str(finding.get("agent") or "") for finding in findings if isinstance(finding, dict)}
+    expected_agents = {
+        "literature_review",
+        "agent_frameworks",
+        "community_implementations",
+        "huggingface_spaces",
+    }
+    missing_agents = sorted(expected_agents - agents)
+    _require(not missing_agents, f"deep-thinking missed agents: {', '.join(missing_agents)}")
+
+    urls = [str(link.get("url") or "") for link in links if isinstance(link, dict)]
+    source_types = {str(link.get("source_type") or "") for link in links if isinstance(link, dict)}
+    for host in ("arxiv.org", "github.com", "huggingface.co", "medium.com"):
+        _require(any(host in url for url in urls), f"deep-thinking links missed {host}")
+    _require({"paper", "github", "hugging-face"}.issubset(source_types), "deep-thinking link types are too thin")
+    return {
+        "research_agents": len(agents),
+        "research_links": len(urls),
+        "research_source_types": sorted(source_types),
+    }
+
+
 def _validate_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     public_text = _as_text(payload)
     leaked_tokens = [token for token in FORBIDDEN_PUBLIC_TOKENS if token in public_text]
@@ -155,12 +187,18 @@ def _validate_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     _require("modules/database/main.tf" in terraform, "Terraform sketch is missing database module output")
     _require(isinstance(generation, dict), "generation status should be an object")
 
+    deep_summary = (
+        _validate_deep_research_payload(payload)
+        if payload.get("deep_thinking")
+        else {"research_agents": 0, "research_links": 0, "research_source_types": []}
+    )
     return {
         "topology": payload.get("topology"),
         "generation_status": generation.get("status"),
         "generation_model": generation.get("model"),
         "reasoning_chunks": len(chunks),
         "evidence_labels": [chunk.get("evidence") for chunk in chunks[:5]],
+        **deep_summary,
     }
 
 
@@ -175,6 +213,7 @@ def main() -> None:
     parser.add_argument("--conflict-resolution", default="")
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--show-preview", action="store_true")
+    parser.add_argument("--deep-thinking", action="store_true")
     args = parser.parse_args()
     _require(args.runs >= 1, "--runs must be at least 1")
 

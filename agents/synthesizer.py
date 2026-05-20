@@ -519,6 +519,64 @@ def _source_summary(evidence_pack: dict, limit: int = 10) -> str:
     return "\n".join(lines)
 
 
+def _research_findings_payload(state: AdvisorState) -> list[dict]:
+    payload = []
+    for finding in state.research_findings.values():
+        payload.append(
+            {
+                "agent": finding.agent,
+                "summary": finding.summary,
+                "status": finding.status,
+                "duration_ms": finding.duration_ms,
+                "subqueries": list(finding.subqueries),
+                "links": [
+                    {
+                        "label": link.label,
+                        "url": link.url,
+                        "source_type": link.source_type,
+                        "relevance": link.relevance,
+                    }
+                    for link in finding.links
+                ],
+            }
+        )
+    return payload
+
+
+def _research_links_payload(state: AdvisorState) -> list[dict]:
+    links = []
+    seen: set[str] = set()
+    for finding in state.research_findings.values():
+        for link in finding.links:
+            if link.url in seen:
+                continue
+            seen.add(link.url)
+            links.append(
+                {
+                    "agent": finding.agent,
+                    "label": link.label,
+                    "url": link.url,
+                    "source_type": link.source_type,
+                    "relevance": link.relevance,
+                }
+            )
+    return links
+
+
+def _research_summary(state: AdvisorState) -> str:
+    if not state.deep_thinking or not state.research_findings:
+        return "- deep thinking disabled"
+    lines = []
+    for finding in state.research_findings.values():
+        lines.append(
+            f"- {finding.agent}: {finding.summary} "
+            f"(status={finding.status}, links={len(finding.links)}, duration_ms={finding.duration_ms:.2f})"
+        )
+        for link in finding.links[:5]:
+            lines.append(f"  link: {link.label} ({link.source_type}) {link.url}")
+    return "\n".join(lines)
+
+
 def _hard_constraint_summary(state: AdvisorState) -> str:
     if not state.hard_constraints:
         return "- none"
@@ -569,6 +627,9 @@ Architecture decisions:
 Evidence snippets:
 {_source_summary(evidence_pack)}
 
+Deep research agents:
+{_research_summary(state)}
+
 Write a final recommendation with exactly these Markdown section headings:
 ### Recommendation
 ### Agentic Reasoning Trace
@@ -601,7 +662,11 @@ def _chunk_bullets(decision: dict, *, limit: int = 2) -> list[str]:
     return bullets
 
 
-def _reasoning_trace(topology: dict, architecture_decisions: list[dict]) -> list[str]:
+def _reasoning_trace(
+    state: AdvisorState,
+    topology: dict,
+    architecture_decisions: list[dict],
+) -> list[str]:
     retrieval = next(
         (decision for decision in architecture_decisions if decision.get("area") == "retrieval_strategy"),
         {},
@@ -610,12 +675,28 @@ def _reasoning_trace(topology: dict, architecture_decisions: list[dict]) -> list
         (decision for decision in architecture_decisions if decision.get("area") == "evaluation"),
         {},
     )
-    return [
+    lines = [
         f"1. Router mapped the brief into human-readable topology drivers, then selected {topology.get('name', 'the selected topology')} from the fixed catalog.",
         f"2. Retrieval evidence { _refs(retrieval) or '[unlabeled]' } was used to decide how semantic recall and exact terminology should be balanced.",
-        "3. The synthesizer projected the chosen stages into deployment components, then checked tradeoffs for latency, cost, security, and evaluation.",
-        f"4. Evaluation evidence { _refs(evaluation) or '[unlabeled]' } set the validation gates so the recommendation can be regression-tested.",
     ]
+    if state.deep_thinking and state.research_findings:
+        agent_names = ", ".join(finding.agent.replace("_", " ") for finding in state.research_findings.values())
+        link_count = len(
+            {link.url for finding in state.research_findings.values() for link in finding.links}
+        )
+        lines.append(
+            f"3. Deep-thinking mode ran parallel research agents ({agent_names}) and attached {link_count} public literature, framework, community, and Hugging Face references for reviewer follow-up."
+        )
+        next_step = 4
+    else:
+        next_step = 3
+    lines.extend(
+        [
+            f"{next_step}. The synthesizer projected the chosen stages into deployment components, then checked tradeoffs for latency, cost, security, and evaluation.",
+            f"{next_step + 1}. Evaluation evidence { _refs(evaluation) or '[unlabeled]' } set the validation gates so the recommendation can be regression-tested.",
+        ]
+    )
+    return lines
 
 
 def _driver_summary(state: AdvisorState) -> str:
@@ -643,7 +724,7 @@ def _fallback_answer(
         ),
         "",
         "### Agentic Reasoning Trace",
-        *_reasoning_trace(topology, architecture_decisions),
+        *_reasoning_trace(state, topology, architecture_decisions),
         "",
         "### Decision Rationale",
     ]
@@ -738,6 +819,7 @@ def _audit_record(
         for source in evidence_pack.get("all_sources", evidence_pack.get("sources", []))
         if source.get("source_id")
     ]
+    research_findings = _research_findings_payload(state)
     return {
         "event": "advisor_synthesis",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -749,6 +831,16 @@ def _audit_record(
         "pending_elicitation": list(state.pending_elicitation),
         "conflict": asdict(state.conflict) if state.conflict else None,
         "generation": generation,
+        "deep_thinking": state.deep_thinking,
+        "research_agents": [
+            {
+                "agent": finding["agent"],
+                "status": finding["status"],
+                "duration_ms": finding["duration_ms"],
+                "link_count": len(finding["links"]),
+            }
+            for finding in research_findings
+        ],
         "graph_trace": list(state.graph_trace),
     }
 
@@ -790,6 +882,9 @@ def synthesize(state: AdvisorState) -> dict:
         "evidence_pack": evidence_pack,
         "architecture_decisions": architecture_decisions,
         "sources": evidence_pack["sources"],
+        "deep_thinking": state.deep_thinking,
+        "research_findings": _research_findings_payload(state),
+        "research_links": _research_links_payload(state),
         "generated_answer": generated_answer,
         "generation": generation,
         "audit_record": audit_record,
