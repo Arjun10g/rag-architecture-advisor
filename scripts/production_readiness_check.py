@@ -32,6 +32,7 @@ REQUIRED_FILES = (
     "agents/research_agents.py",
     "corpus/manifest.yaml",
     "scripts/api_output_probe.py",
+    "scripts/deep_research_full_text_smoke.py",
     "scripts/deep_research_smoke.py",
     "scripts/hf_generation_probe.py",
     "eval/gold/v0_2_expanded.json",

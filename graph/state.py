@@ -64,12 +64,26 @@ class ResearchLink:
 
 
 @dataclass
+class ResearchApproachSummary:
+    label: str
+    url: str
+    source_type: str
+    status: str
+    word_count: int
+    summary: str
+    approach_steps: list[str] = field(default_factory=list)
+    implementation_notes: list[str] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ResearchFinding:
     agent: str
     summary: str
     status: str = "ok"
     subqueries: list[str] = field(default_factory=list)
     links: list[ResearchLink] = field(default_factory=list)
+    approach_summaries: list[ResearchApproachSummary] = field(default_factory=list)
     source_ids: list[str] = field(default_factory=list)
     sources: list[SourceRef] = field(default_factory=list)
     duration_ms: float = 0.0

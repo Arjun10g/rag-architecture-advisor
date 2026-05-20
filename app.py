@@ -364,9 +364,32 @@ def _public_research_findings(raw_trace: dict[str, Any]) -> list[dict[str, Any]]
             "status": finding.get("status"),
             "duration_ms": finding.get("duration_ms"),
             "link_count": len(finding.get("links") or []),
+            "approach_summaries": [
+                {
+                    "label": item.get("label"),
+                    "url": item.get("url"),
+                    "source_type": item.get("source_type"),
+                    "status": item.get("status"),
+                    "word_count": item.get("word_count"),
+                    "summary": item.get("summary"),
+                    "approach_steps": item.get("approach_steps") or [],
+                    "implementation_notes": item.get("implementation_notes") or [],
+                    "limitations": item.get("limitations") or [],
+                }
+                for item in finding.get("approach_summaries") or []
+            ],
         }
         for finding in findings
     ]
+
+
+def _public_research_approach_summaries(raw_trace: dict[str, Any]) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    for finding in _public_research_findings(raw_trace):
+        agent = finding.get("agent")
+        for item in finding.get("approach_summaries") or []:
+            summaries.append({"agent": agent, **item})
+    return summaries
 
 
 def _format_deployment(state: AdvisorState) -> str:
@@ -511,9 +534,11 @@ def _format_trace(state: AdvisorState) -> str:
     if state.deep_thinking and research_findings:
         lines.extend(["", "### 7. Ran deep research agents"])
         for finding in research_findings:
+            approaches = finding.get("approach_summaries") or []
+            read_count = sum(1 for item in approaches if item.get("status") == "ok")
             lines.append(
                 f"- **{finding.get('agent')}:** {finding.get('summary')} "
-                f"(status: {finding.get('status')})"
+                f"(status: {finding.get('status')}; full references read: {read_count})"
             )
 
     if state.conflict:
@@ -556,6 +581,24 @@ def _format_research(state: AdvisorState) -> str:
                 lines.append(f"- [{label}]({url}) - `{source_type}`")
                 if relevance:
                     lines.append(f"  {relevance}")
+        approaches = finding.get("approach_summaries") or []
+        if approaches:
+            lines.append("")
+            lines.append("Full-Reference Approach Summaries:")
+            for item in approaches[:6]:
+                label = str(item.get("label") or "Reference")
+                url = str(item.get("url") or "")
+                status = str(item.get("status") or "unknown")
+                word_count = item.get("word_count") or 0
+                lines.append(f"- [{label}]({url}) - `{status}`, `{word_count}` words")
+                if item.get("summary"):
+                    lines.append(f"  {item['summary']}")
+                for step in (item.get("approach_steps") or [])[:3]:
+                    lines.append(f"  Approach: {step}")
+                for note in (item.get("implementation_notes") or [])[:2]:
+                    lines.append(f"  Implementation: {note}")
+                for limitation in (item.get("limitations") or [])[:2]:
+                    lines.append(f"  Limitation: {limitation}")
         subqueries = finding.get("subqueries") or []
         if subqueries:
             lines.append("")
@@ -650,6 +693,7 @@ def advise_api(
         "deep_thinking": bool(raw_trace.get("deep_thinking")),
         "research": research,
         "research_findings": _public_research_findings(raw_trace),
+        "research_approach_summaries": _public_research_approach_summaries(raw_trace),
         "research_links": _public_research_links(raw_trace),
         "pending_questions": [
             ATTRIBUTE_LABELS.get(attr, attr)

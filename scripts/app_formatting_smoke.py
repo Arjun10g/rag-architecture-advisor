@@ -10,6 +10,7 @@ if __package__ in {None, ""}:
 os.environ["LLM_PROVIDER"] = "disabled"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 os.environ["ADVISOR_LATENCY_PROFILE"] = "quality"
+os.environ["DEEP_RESEARCH_FULL_TEXT"] = "false"
 
 from app import advise, advise_api, advise_detailed, clear_detail_response
 

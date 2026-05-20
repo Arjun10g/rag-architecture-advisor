@@ -202,6 +202,7 @@ def _validate_deep_research_payload(payload: dict[str, Any]) -> dict[str, Any]:
     research = str(payload.get("research") or "")
     findings = payload.get("research_findings")
     links = payload.get("research_links")
+    approach_summaries = payload.get("research_approach_summaries") or []
     _require("Deep Research Agents" in research, "research tab output is missing agent summaries")
     _require(isinstance(findings, list) and findings, "deep-thinking findings should be non-empty")
     _require(isinstance(links, list) and links, "deep-thinking links should be non-empty")
@@ -221,9 +222,17 @@ def _validate_deep_research_payload(payload: dict[str, Any]) -> dict[str, Any]:
     for host in ("arxiv.org", "github.com", "huggingface.co", "medium.com"):
         _require(any(host in url for url in urls), f"deep-thinking links missed {host}")
     _require({"paper", "github", "hugging-face"}.issubset(source_types), "deep-thinking link types are too thin")
+    if payload.get("_require_full_text"):
+        _require(
+            isinstance(approach_summaries, list) and approach_summaries,
+            "deep-thinking full-text approach summaries should be non-empty",
+        )
+        read_items = [item for item in approach_summaries if item.get("status") == "ok"]
+        _require(read_items, "deep-thinking full-text summaries should include at least one successfully read reference")
     return {
         "research_agents": len(agents),
         "research_links": len(urls),
+        "research_approach_summaries": len(approach_summaries),
         "research_source_types": sorted(source_types),
     }
 
@@ -283,6 +292,7 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--show-preview", action="store_true")
     parser.add_argument("--deep-thinking", action="store_true")
+    parser.add_argument("--require-full-text", action="store_true")
     parser.add_argument("--hf-token", default=None, help="HF token for private Spaces; defaults to HF_TOKEN/HF_ACCESS_TOKEN.")
     parser.add_argument("--auth-username", default=None, help="Gradio auth username; defaults to GRADIO_AUTH_USERNAME.")
     parser.add_argument("--auth-password", default=None, help="Gradio auth password; defaults to GRADIO_AUTH_PASSWORD.")
@@ -302,7 +312,10 @@ def main() -> None:
         started = time.perf_counter()
         payload = _predict(args)
         latencies.append((time.perf_counter() - started) * 1000)
-        _validate_public_payload(payload)
+        validation_payload = dict(payload)
+        if args.require_full_text:
+            validation_payload["_require_full_text"] = True
+        _validate_public_payload(validation_payload)
     assert payload is not None
     latency = _latency_summary(latencies)
     slo_p50, slo_p99 = _latency_slo(args)
@@ -310,7 +323,11 @@ def main() -> None:
     summary = {
         "url": args.url,
         "endpoint": args.endpoint,
-        **_validate_public_payload(payload),
+        **_validate_public_payload(
+            dict(payload) | {"_require_full_text": True}
+            if args.require_full_text
+            else payload
+        ),
         "client_latency_ms": latency,
         "latency_slo": slo_status,
     }

@@ -22,9 +22,10 @@ explicit conflict-resolution value, then reruns the same graph with those values
 Deep-thinking mode adds a parallel research pass before synthesis. It runs four
 agent roles over the local literature corpus and curated public references:
 literature review, agent-framework review, community implementation review, and
-Hugging Face/Spaces review. When enabled, the UI shows a Research tab with
-paper, docs, GitHub, Medium, and Hugging Face links; the public API returns the
-same links without raw corpus IDs or file paths.
+Hugging Face/Spaces review. By default it fetches the full text of selected
+public references, extracts the approach, implementation notes, and limitations,
+and shows those summaries in the Research tab. The public API returns the same
+summaries and links without raw corpus IDs or file paths.
 
 ## Data Storage
 
@@ -61,6 +62,7 @@ python3 -m compileall app.py graph agents retrieval ingestion synth llm eval scr
 python3 scripts/router_state_smoke.py
 python3 scripts/graph_flow_smoke.py
 python3 scripts/deep_research_smoke.py
+python3 scripts/deep_research_full_text_smoke.py
 python3 scripts/specialist_fanout_smoke.py
 python3 scripts/topology_catalog_smoke.py
 python3 scripts/terraform_emit_smoke.py
@@ -128,6 +130,7 @@ graph state:
 ```bash
 python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --runs 3
 python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --deep-thinking
+python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --deep-thinking --require-full-text
 python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --runs 5 --slo-from-env
 ```
 
@@ -172,6 +175,9 @@ Production settings to verify:
 - Keep the deep-thinking smoke green before launch. It checks that the parallel
   research agents return literature, framework, GitHub, Medium, and Hugging Face
   references without exposing internal source identifiers.
+- Keep `DEEP_RESEARCH_FULL_TEXT=true` in production so deep mode reads and
+  summarizes selected full public references. Use `DEEP_RESEARCH_MAX_FULL_TEXT_LINKS`,
+  fetch timeout, and cache settings to bound latency and network risk.
 
 ## Retrieval Modes
 

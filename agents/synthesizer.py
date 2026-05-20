@@ -538,6 +538,20 @@ def _research_findings_payload(state: AdvisorState) -> list[dict]:
                     }
                     for link in finding.links
                 ],
+                "approach_summaries": [
+                    {
+                        "label": item.label,
+                        "url": item.url,
+                        "source_type": item.source_type,
+                        "status": item.status,
+                        "word_count": item.word_count,
+                        "summary": item.summary,
+                        "approach_steps": list(item.approach_steps),
+                        "implementation_notes": list(item.implementation_notes),
+                        "limitations": list(item.limitations),
+                    }
+                    for item in finding.approach_summaries
+                ],
             }
         )
     return payload
@@ -574,6 +588,13 @@ def _research_summary(state: AdvisorState) -> str:
         )
         for link in finding.links[:5]:
             lines.append(f"  link: {link.label} ({link.source_type}) {link.url}")
+        for item in finding.approach_summaries[:3]:
+            lines.append(
+                f"  full-reference summary: {item.label} "
+                f"(status={item.status}, words={item.word_count}) {item.summary}"
+            )
+            for step in item.approach_steps[:2]:
+                lines.append(f"    approach: {step}")
     return "\n".join(lines)
 
 

@@ -2,12 +2,24 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from hashlib import sha256
+from html.parser import HTMLParser
 import operator
+import os
+from pathlib import Path
 import re
 import time
 from typing import Annotated, Callable, TypedDict
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-from graph.state import AdvisorState, ResearchFinding, ResearchLink, SourceRef
+from graph.state import (
+    AdvisorState,
+    ResearchApproachSummary,
+    ResearchFinding,
+    ResearchLink,
+    SourceRef,
+)
 from retrieval.index import SearchResult
 from retrieval.service import retrieve
 
@@ -20,6 +32,21 @@ except Exception:  # pragma: no cover - fallback path covers missing optional in
 
 
 ResearchRetrieveFn = Callable[[str, str, int, dict[str, str] | None], list[SearchResult]]
+FullTextFetchFn = Callable[[ResearchLink], "FullTextDocument"]
+
+
+@dataclass(frozen=True)
+class FullTextDocument:
+    label: str
+    url: str
+    source_type: str
+    text: str
+    status: str = "ok"
+    error: str = ""
+
+    @property
+    def word_count(self) -> int:
+        return len(self.text.split())
 
 
 @dataclass(frozen=True)
@@ -188,24 +215,26 @@ MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
 def run_research_agents(
     state: AdvisorState,
     retrieve_fn: ResearchRetrieveFn | None = None,
+    full_text_fetcher: FullTextFetchFn | None = None,
 ) -> dict[str, ResearchFinding]:
     retrieve_fn = retrieve_fn or retrieve
-    langgraph_findings = _run_with_langgraph(state, retrieve_fn)
+    langgraph_findings = _run_with_langgraph(state, retrieve_fn, full_text_fetcher)
     if langgraph_findings is not None:
         return langgraph_findings
-    return _run_with_thread_pool(state, retrieve_fn)
+    return _run_with_thread_pool(state, retrieve_fn, full_text_fetcher)
 
 
 def _run_with_langgraph(
     state: AdvisorState,
     retrieve_fn: ResearchRetrieveFn,
+    full_text_fetcher: FullTextFetchFn | None,
 ) -> dict[str, ResearchFinding] | None:
     if StateGraph is None or START is None or END is None:
         return None
     try:
         graph = StateGraph(ResearchGraphState)
         for spec in RESEARCH_AGENT_SPECS:
-            graph.add_node(spec.name, _langgraph_node(spec))
+            graph.add_node(spec.name, _langgraph_node(spec, full_text_fetcher))
             graph.add_edge(START, spec.name)
             graph.add_edge(spec.name, END)
         result = graph.compile().invoke(
@@ -221,13 +250,17 @@ def _run_with_langgraph(
     return {spec.name: findings[spec.name] for spec in RESEARCH_AGENT_SPECS}
 
 
-def _langgraph_node(spec: ResearchAgentSpec):
+def _langgraph_node(
+    spec: ResearchAgentSpec,
+    full_text_fetcher: FullTextFetchFn | None,
+):
     def node(graph_state: ResearchGraphState) -> dict[str, dict[str, ResearchFinding]]:
         try:
             finding = _run_research_agent(
                 spec,
                 graph_state["advisor_state"],
                 graph_state["retrieve_fn"],
+                full_text_fetcher,
             )
         except Exception as exc:
             finding = _failed_finding(spec.name, exc)
@@ -239,11 +272,18 @@ def _langgraph_node(spec: ResearchAgentSpec):
 def _run_with_thread_pool(
     state: AdvisorState,
     retrieve_fn: ResearchRetrieveFn,
+    full_text_fetcher: FullTextFetchFn | None,
 ) -> dict[str, ResearchFinding]:
     findings: dict[str, ResearchFinding] = {}
     with ThreadPoolExecutor(max_workers=len(RESEARCH_AGENT_SPECS)) as executor:
         futures = {
-            executor.submit(_run_research_agent, spec, state, retrieve_fn): spec.name
+            executor.submit(
+                _run_research_agent,
+                spec,
+                state,
+                retrieve_fn,
+                full_text_fetcher,
+            ): spec.name
             for spec in RESEARCH_AGENT_SPECS
         }
         for future in as_completed(futures):
@@ -265,6 +305,7 @@ def _failed_finding(name: str, exc: Exception) -> ResearchFinding:
         status="failed",
         subqueries=[],
         links=[],
+        approach_summaries=[],
         sources=[],
         source_ids=[],
         duration_ms=0.0,
@@ -275,6 +316,7 @@ def _run_research_agent(
     spec: ResearchAgentSpec,
     state: AdvisorState,
     retrieve_fn: ResearchRetrieveFn,
+    full_text_fetcher: FullTextFetchFn | None,
 ) -> ResearchFinding:
     started = time.perf_counter()
     sources: list[SourceRef] = []
@@ -310,13 +352,21 @@ def _run_research_agent(
     selected_corpus_links = [
         link for link in corpus_links if link.url not in {item.url for item in external_links}
     ][:6]
+    links = [*external_links, *selected_corpus_links]
+    approach_summaries = _approach_summaries(
+        spec,
+        state,
+        links,
+        full_text_fetcher=full_text_fetcher,
+    )
     duration_ms = round((time.perf_counter() - started) * 1000, 2)
     return ResearchFinding(
         agent=spec.name,
-        summary=_summary(spec, sources, external_links, selected_corpus_links),
+        summary=_summary(spec, sources, external_links, selected_corpus_links, approach_summaries),
         status="ok",
         subqueries=list(spec.subqueries),
-        links=[*external_links, *selected_corpus_links],
+        links=links,
+        approach_summaries=approach_summaries,
         source_ids=[source.source_id for source in sources],
         sources=sources,
         duration_ms=duration_ms,
@@ -383,12 +433,19 @@ def _summary(
     sources: list[SourceRef],
     external_links: list[ResearchLink],
     corpus_links: list[ResearchLink],
+    approach_summaries: list[ResearchApproachSummary],
 ) -> str:
     link_types = sorted({link.source_type for link in [*external_links, *corpus_links]})
+    read_count = sum(1 for item in approach_summaries if item.status == "ok")
     return (
         f"{spec.summary_template} Retrieved {len(sources)} local evidence chunks and "
         f"attached {len(external_links) + len(corpus_links)} public links"
         + (f" across {', '.join(link_types)}." if link_types else ".")
+        + (
+            f" Read and summarized {read_count} full public references."
+            if approach_summaries
+            else " Full-reference summarization was not enabled for this run."
+        )
     )
 
 
@@ -419,3 +476,314 @@ def _source_type(url: str) -> str:
     if "docs." in lowered or "learn.microsoft.com" in lowered:
         return "docs"
     return "web"
+
+
+def _approach_summaries(
+    spec: ResearchAgentSpec,
+    state: AdvisorState,
+    links: list[ResearchLink],
+    *,
+    full_text_fetcher: FullTextFetchFn | None,
+) -> list[ResearchApproachSummary]:
+    if not _env_bool("DEEP_RESEARCH_FULL_TEXT", True) and full_text_fetcher is None:
+        return []
+
+    selected = _summary_links(links, limit=_env_int("DEEP_RESEARCH_MAX_FULL_TEXT_LINKS", 4))
+    if not selected:
+        return []
+
+    fetcher = full_text_fetcher or fetch_full_text
+    summaries: list[ResearchApproachSummary] = []
+    workers = min(len(selected), _env_int("DEEP_RESEARCH_FETCH_WORKERS", 4))
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(fetcher, link): link for link in selected}
+        for future in as_completed(futures):
+            link = futures[future]
+            try:
+                document = future.result()
+            except Exception as exc:
+                document = FullTextDocument(
+                    label=link.label,
+                    url=link.url,
+                    source_type=link.source_type,
+                    text="",
+                    status="failed",
+                    error=str(exc),
+                )
+            summaries.append(_summarize_document(spec, state, link, document))
+
+    order = {link.url: index for index, link in enumerate(selected)}
+    return sorted(summaries, key=lambda item: order.get(item.url, 999))
+
+
+def _summary_links(links: list[ResearchLink], *, limit: int) -> list[ResearchLink]:
+    priority = {
+        "paper": 0,
+        "docs": 1,
+        "github": 2,
+        "medium": 3,
+        "hugging-face": 4,
+        "community": 5,
+    }
+    seen: set[str] = set()
+    unique = []
+    for link in sorted(links, key=lambda item: priority.get(item.source_type, 9)):
+        if link.url in seen:
+            continue
+        seen.add(link.url)
+        unique.append(link)
+        if len(unique) >= limit:
+            break
+    return unique
+
+
+def fetch_full_text(link: ResearchLink) -> FullTextDocument:
+    cache_path = _full_text_cache_path(link.url)
+    if cache_path.exists():
+        return FullTextDocument(
+            label=link.label,
+            url=link.url,
+            source_type=link.source_type,
+            text=cache_path.read_text(encoding="utf-8"),
+            status="ok",
+        )
+
+    url = _fetch_url(link.url)
+    request = Request(url, headers={"User-Agent": "rag-architecture-advisor/1.0"})
+    try:
+        with urlopen(request, timeout=_env_float("DEEP_RESEARCH_FETCH_TIMEOUT_SECONDS", 6.0)) as response:
+            content_type = response.headers.get("content-type", "")
+            raw = response.read(_env_int("DEEP_RESEARCH_MAX_FETCH_BYTES", 2_000_000))
+    except (HTTPError, URLError, TimeoutError) as exc:
+        return FullTextDocument(
+            label=link.label,
+            url=link.url,
+            source_type=link.source_type,
+            text="",
+            status="failed",
+            error=str(exc),
+        )
+
+    text = _decode_response(raw, content_type)
+    if "html" in content_type.lower() or "<html" in text[:500].lower():
+        text = _html_to_text(text)
+    text = _normalize_text(text)
+    if text:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(text, encoding="utf-8")
+    return FullTextDocument(
+        label=link.label,
+        url=link.url,
+        source_type=link.source_type,
+        text=text,
+        status="ok" if text else "empty",
+    )
+
+
+def _fetch_url(url: str) -> str:
+    if "github.com" not in url or "/blob/" not in url:
+        return url
+    return (
+        url.replace("https://github.com/", "https://raw.githubusercontent.com/")
+        .replace("/blob/", "/")
+    )
+
+
+def _full_text_cache_path(url: str) -> Path:
+    digest = sha256(url.encode("utf-8")).hexdigest()
+    return Path(os.getenv("DEEP_RESEARCH_CACHE_DIR", ".cache/deep_research")) / f"{digest}.txt"
+
+
+def _decode_response(raw: bytes, content_type: str) -> str:
+    charset = "utf-8"
+    match = re.search(r"charset=([\w-]+)", content_type, flags=re.IGNORECASE)
+    if match:
+        charset = match.group(1)
+    return raw.decode(charset, errors="replace")
+
+
+class _HTMLTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts: list[str] = []
+        self.skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs):
+        if tag in {"script", "style", "svg", "noscript"}:
+            self.skip_depth += 1
+        if tag in {"p", "br", "li", "h1", "h2", "h3", "h4", "pre", "tr"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str):
+        if tag in {"script", "style", "svg", "noscript"} and self.skip_depth:
+            self.skip_depth -= 1
+        if tag in {"p", "li", "h1", "h2", "h3", "h4", "pre", "tr"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str):
+        if self.skip_depth:
+            return
+        stripped = data.strip()
+        if stripped:
+            self.parts.append(stripped)
+
+
+def _html_to_text(html: str) -> str:
+    parser = _HTMLTextExtractor()
+    parser.feed(html)
+    return "\n".join(parser.parts)
+
+
+def _normalize_text(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        compact = " ".join(line.split())
+        if compact:
+            lines.append(compact)
+    return "\n".join(lines)
+
+
+def _summarize_document(
+    spec: ResearchAgentSpec,
+    state: AdvisorState,
+    link: ResearchLink,
+    document: FullTextDocument,
+) -> ResearchApproachSummary:
+    if document.status != "ok" or document.word_count < 80:
+        return ResearchApproachSummary(
+            label=link.label,
+            url=link.url,
+            source_type=link.source_type,
+            status=document.status,
+            word_count=document.word_count,
+            summary=document.error or "Full text could not be read into a useful summary.",
+        )
+
+    sentences = _sentences(document.text)
+    themes = _themes(document.text)
+    approach_steps = _select_sentences(
+        sentences,
+        _agent_keywords(spec.name) | {"approach", "pipeline", "system", "workflow", "retrieval"},
+        limit=5,
+    )
+    implementation_notes = _select_sentences(
+        sentences,
+        {"implement", "index", "rerank", "agent", "graph", "tool", "evaluation", "metadata", "vector"},
+        limit=4,
+    )
+    limitations = _select_sentences(
+        sentences,
+        {"latency", "cost", "risk", "limit", "failure", "tradeoff", "benchmark", "quality"},
+        limit=3,
+        fallback=False,
+    )
+    summary = (
+        f"Read {document.word_count} words from the full reference. "
+        f"The approach emphasizes {', '.join(themes[:4]) or 'agentic retrieval design'} "
+        f"and is relevant to this brief because it informs {spec.name.replace('_', ' ')} "
+        "choices before synthesis."
+    )
+    return ResearchApproachSummary(
+        label=link.label,
+        url=link.url,
+        source_type=link.source_type,
+        status="ok",
+        word_count=document.word_count,
+        summary=summary,
+        approach_steps=approach_steps,
+        implementation_notes=implementation_notes,
+        limitations=limitations,
+    )
+
+
+def _sentences(text: str) -> list[str]:
+    compact = " ".join(text.split())
+    raw_sentences = re.split(r"(?<=[.!?])\s+", compact)
+    return [
+        sentence.strip()
+        for sentence in raw_sentences
+        if 45 <= len(sentence.strip()) <= 360 and not _boilerplate_sentence(sentence)
+    ]
+
+
+def _select_sentences(
+    sentences: list[str],
+    keywords: set[str],
+    *,
+    limit: int,
+    fallback: bool = True,
+) -> list[str]:
+    scored = []
+    for index, sentence in enumerate(sentences):
+        lowered = sentence.lower()
+        score = sum(1 for keyword in keywords if keyword in lowered)
+        if score:
+            scored.append((score, -index, sentence))
+    selected = [sentence for _, _, sentence in sorted(scored, reverse=True)[:limit]]
+    if selected:
+        return selected
+    return sentences[:limit] if fallback else []
+
+
+def _boilerplate_sentence(sentence: str) -> bool:
+    lowered = sentence.lower()
+    boilerplate_terms = (
+        "skip to main content",
+        "cookie",
+        "sign in",
+        "bibliographic tools",
+        "toggle navigation",
+        "search documentation",
+        "privacy policy",
+        "terms of service",
+        "subscribe to",
+    )
+    return any(term in lowered for term in boilerplate_terms)
+
+
+def _themes(text: str) -> list[str]:
+    candidates = {
+        "hybrid retrieval": ("hybrid", "bm25", "lexical"),
+        "dense vector search": ("embedding", "vector", "dense"),
+        "reranking": ("rerank", "cross-encoder", "colbert"),
+        "agent orchestration": ("agent", "tool", "graph", "workflow"),
+        "evaluation": ("evaluation", "benchmark", "metric", "quality"),
+        "latency control": ("latency", "throughput", "timeout"),
+        "governance": ("permission", "audit", "security", "guardrail"),
+    }
+    lowered = text.lower()
+    scored = [
+        (sum(lowered.count(term) for term in terms), label)
+        for label, terms in candidates.items()
+    ]
+    return [label for score, label in sorted(scored, reverse=True) if score > 0]
+
+
+def _agent_keywords(agent: str) -> set[str]:
+    return {
+        "literature_review": {"survey", "benchmark", "retrieval", "generation", "evaluation"},
+        "agent_frameworks": {"agent", "pipeline", "graph", "tool", "workflow"},
+        "community_implementations": {"github", "implementation", "hybrid", "rerank", "observability"},
+        "huggingface_spaces": {"space", "gradio", "hugging face", "smolagents", "agent"},
+    }.get(agent, {"retrieval", "generation", "agent"})
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return value.lower().strip() in {"1", "true", "yes", "on"}
+
+
+def _env_int(key: str, default: int) -> int:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return int(value)
+
+
+def _env_float(key: str, default: float) -> float:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return float(value)
