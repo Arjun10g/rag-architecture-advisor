@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import pickle
 import re
+import threading
 from typing import Any
 
 from retrieval.chunking import Chunk
@@ -17,6 +18,8 @@ DEFAULT_EMBEDDING_MODEL = "mixedbread-ai/mxbai-embed-large-v1"
 DEFAULT_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 DEFAULT_DIMENSIONS = (1024, 768, 512, 384, 256)
 _MODEL_CACHE: dict[str, Any] = {}
+_MODEL_CACHE_LOCK = threading.Lock()
+_MODEL_ENCODE_LOCK = threading.Lock()
 
 
 class EmbeddingUnavailable(RuntimeError):
@@ -56,12 +59,13 @@ class SentenceTransformerEmbedder:
 
         prepared = [self._prepare_query(text) for text in texts] if is_query else texts
         try:
-            raw_vectors = self._load_model().encode(
-                prepared,
-                batch_size=self.config.batch_size,
-                normalize_embeddings=True,
-                show_progress_bar=False,
-            )
+            with _MODEL_ENCODE_LOCK:
+                raw_vectors = self._load_model().encode(
+                    prepared,
+                    batch_size=self.config.batch_size,
+                    normalize_embeddings=True,
+                    show_progress_bar=False,
+                )
         except Exception as exc:  # pragma: no cover - depends on optional ML runtime/model cache.
             raise EmbeddingUnavailable(
                 f"Could not encode with {self.config.model_name}: {exc}"
@@ -76,27 +80,28 @@ class SentenceTransformerEmbedder:
     def _load_model(self) -> Any:
         if self._model is not None:
             return self._model
-        if self.config.model_name in _MODEL_CACHE:
-            self._model = _MODEL_CACHE[self.config.model_name]
+        with _MODEL_CACHE_LOCK:
+            if self.config.model_name in _MODEL_CACHE:
+                self._model = _MODEL_CACHE[self.config.model_name]
+                return self._model
+
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError as exc:  # pragma: no cover - optional dependency.
+                raise EmbeddingUnavailable(
+                    "sentence-transformers is not installed; run "
+                    "`python3 -m pip install -r requirements.txt` before dense retrieval "
+                    "or embedding ablations."
+                ) from exc
+
+            try:
+                self._model = SentenceTransformer(self.config.model_name)
+            except Exception as exc:  # pragma: no cover - depends on local model/network availability.
+                raise EmbeddingUnavailable(
+                    f"Could not load embedding model {self.config.model_name}: {exc}"
+                ) from exc
+            _MODEL_CACHE[self.config.model_name] = self._model
             return self._model
-
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError as exc:  # pragma: no cover - optional dependency.
-            raise EmbeddingUnavailable(
-                "sentence-transformers is not installed; run "
-                "`python3 -m pip install -r requirements.txt` before dense retrieval "
-                "or embedding ablations."
-            ) from exc
-
-        try:
-            self._model = SentenceTransformer(self.config.model_name)
-        except Exception as exc:  # pragma: no cover - depends on local model/network availability.
-            raise EmbeddingUnavailable(
-                f"Could not load embedding model {self.config.model_name}: {exc}"
-            ) from exc
-        _MODEL_CACHE[self.config.model_name] = self._model
-        return self._model
 
 
 class DenseVectorIndex:
