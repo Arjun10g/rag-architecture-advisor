@@ -11,6 +11,15 @@ os.environ["LLM_PROVIDER"] = "disabled"
 
 from graph.build import build_graph
 from llm.provider import GenerationConfig, LLMProviderUnavailable, _extract_chat_content, get_provider
+import agents.synthesizer as synthesizer
+
+
+class LeakyProvider:
+    name = "hf"
+    model = "leaky-test-model"
+
+    def generate(self, prompt: str, *, system: str | None = None, **kwargs: object) -> str:
+        return "Decision Trace\nA2: high\ncorpus_curated_bad_chunk_id\nNo real tradeoffs."
 
 
 def main() -> None:
@@ -39,6 +48,22 @@ def main() -> None:
         raise AssertionError("synthesizer did not attach generated_answer")
     if not output.get("architecture_decisions"):
         raise AssertionError("structured architecture decisions disappeared")
+
+    original_get_provider = synthesizer.get_provider
+    synthesizer.get_provider = lambda: LeakyProvider()
+    try:
+        guarded = build_graph().invoke(
+            {"user_brief": "Build an internal API docs assistant over fast-moving SDK docs."}
+        )
+    finally:
+        synthesizer.get_provider = original_get_provider
+    guarded_output = guarded.draft_output or {}
+    guarded_generation = guarded_output.get("generation") or {}
+    if guarded_generation.get("status") != "guarded_fallback":
+        raise AssertionError(f"expected guarded fallback, got {guarded_generation}")
+    guarded_answer = str(guarded_output.get("generated_answer") or "")
+    if "corpus_" in guarded_answer or "A2:" in guarded_answer:
+        raise AssertionError("guarded fallback leaked internal identifiers")
 
     print(f"llm_provider_smoke={generation['status']}")
 

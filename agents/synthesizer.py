@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 
 from graph.state import AdvisorState
 from llm.provider import LLMProviderUnavailable, get_provider
@@ -74,6 +75,22 @@ USEFUL_SNIPPET_TERMS = (
     "storage",
     "vector",
 )
+
+FORBIDDEN_GENERATED_PATTERNS = (
+    "corpus_",
+    "corpus/",
+    ".md",
+    "router:start",
+    "Graph Trace",
+    "Requirement Vector",
+    "source_id",
+    "source_ids",
+    "chunk_id",
+    "two_stage_",
+)
+
+A_CODE_RE = re.compile(r"\bA(?:1[0-2]|[1-9])\s*(?::|=)")
+EVIDENCE_REF_RE = re.compile(r"\[E\d+\]")
 
 
 def _agent_rank(source: dict) -> int:
@@ -649,6 +666,22 @@ def _fallback_answer(
     return "\n".join(lines)
 
 
+def _answer_quality_issue(answer: str) -> str | None:
+    for pattern in FORBIDDEN_GENERATED_PATTERNS:
+        if pattern in answer:
+            return f"generated answer exposed internal marker {pattern!r}"
+    if A_CODE_RE.search(answer):
+        return "generated answer exposed raw attribute codes"
+    if not EVIDENCE_REF_RE.search(answer):
+        return "generated answer omitted evidence labels"
+    lower = answer.lower()
+    if "tradeoff" not in lower:
+        return "generated answer omitted accepted tradeoffs"
+    if "validat" not in lower:
+        return "generated answer omitted validation guidance"
+    return None
+
+
 def _generate_answer(
     state: AdvisorState,
     topology: dict,
@@ -666,6 +699,14 @@ def _generate_answer(
             "provider": getattr(provider, "name", "unknown"),
             "model": getattr(provider, "model", None),
             "reason": str(exc),
+        }
+    quality_issue = _answer_quality_issue(answer)
+    if quality_issue:
+        return _fallback_answer(state, topology, architecture_decisions), {
+            "status": "guarded_fallback",
+            "provider": getattr(provider, "name", "unknown"),
+            "model": getattr(provider, "model", None),
+            "reason": quality_issue,
         }
     return answer, {
         "status": "ok",
