@@ -165,18 +165,17 @@ Production settings to verify:
   `/advise` endpoint never returns the raw graph state.
 - Set `ADVISOR_AUDIT_LOG_PATH` to a persistent log sink or mounted volume, for
   example `/data/advisor-audit.jsonl` on a persistent Space.
-- For dense/hybrid production retrieval, build and mount the LanceDB index with
-  both 1024 and 512 dimensional tables, then set `RETRIEVAL_MODE=hybrid`,
-  `VECTOR_STORE_BACKEND=lancedb`, and `EMBEDDING_DIM=1024` or `512`.
-  On Hugging Face Spaces, mount the vector-index Dataset at `/data/vector-index`
-  and set `VECTOR_INDEX_DIR=/data/vector-index/lancedb`. If using a writable
-  mounted volume instead, ship the built index under `corpus/index/lancedb` and
-  set `VECTOR_INDEX_BOOTSTRAP_DIR=corpus/index/lancedb` so first boot copies the
-  artifact into that volume.
-- Keep `LATENCY_SLO_P50_MS=20000` and `LATENCY_SLO_P99_MS=30000` as the standard
-  hosted hybrid/LanceDB SLO after cold model load, unless product requirements
-  say otherwise. Deep-thinking/full-text mode uses
-  `DEEP_LATENCY_SLO_P50_MS=35000` and `DEEP_LATENCY_SLO_P99_MS=45000`.
+- For dense/hybrid production retrieval, use Qdrant collections
+  `rag_advisor_chunks_dim_1024` and `rag_advisor_chunks_dim_512`, then set
+  `RETRIEVAL_MODE=hybrid`, `VECTOR_STORE_BACKEND=qdrant`,
+  `VECTOR_TABLE_NAME=rag_advisor_chunks`, and `EMBEDDING_DIM=1024` or `512`.
+  The LanceDB index remains useful as a local build artifact and fallback.
+- On Hugging Face Spaces, set `EMBEDDING_PROVIDER=hf` so query embeddings run on
+  HF feature extraction instead of `cpu-basic`. Set `PREWARM_RETRIEVER=true` to
+  pay embedding setup during startup instead of on the first request.
+- Keep `LATENCY_SLO_P50_MS=12000` and `LATENCY_SLO_P99_MS=20000` as the standard
+  hosted hybrid/Qdrant SLO. Deep-thinking/full-text mode uses
+  `DEEP_LATENCY_SLO_P50_MS=25000` and `DEEP_LATENCY_SLO_P99_MS=35000`.
 - If hosted Llama latency misses the SLO, set `ADVISOR_LATENCY_PROFILE=fast` to
   use the deterministic grounded narrative while preserving retrieval,
   citations, deployment projection, and audit output.
