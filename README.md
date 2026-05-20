@@ -99,6 +99,15 @@ falls back to a deterministic generated summary and records the reason in
 `draft_output.generation`.
 The default is a larger Llama instruct model for stronger narrative synthesis;
 you can swap `HF_INFERENCE_MODEL` to any model your Hugging Face token can access.
+To verify the configured provider path without printing secrets:
+
+```bash
+python3 scripts/hf_generation_probe.py
+```
+
+The probe fails if the displayed answer leaks raw corpus IDs, file paths, router
+trace markers, or raw attribute codes. If the provider is unavailable, the app
+uses deterministic fallback and records the reason in `draft_output.generation`.
 
 Every response includes an `audit_record` in raw JSON. Set
 `ADVISOR_AUDIT_LOG_PATH=/path/to/advisor-audit.jsonl` to persist those records in
