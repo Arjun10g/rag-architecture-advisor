@@ -150,6 +150,7 @@ python3 scripts/production_readiness_check.py --profile production
 python3 scripts/api_output_probe.py --url https://<space-or-host>/ --runs 5 --slo-from-env
 python3 scripts/api_output_probe.py --url https://<space-or-host>/ --deep-thinking --slo-from-env
 python3 scripts/hf_generation_probe.py
+python3 scripts/qdrant_blue_green_promote.py --target-table rag_advisor_chunks --alias-table rag_advisor_chunks_live --dry-run
 ```
 
 Production settings to verify:
@@ -165,11 +166,16 @@ Production settings to verify:
   `/advise` endpoint never returns the raw graph state.
 - Set `ADVISOR_AUDIT_LOG_PATH` to a persistent log sink or mounted volume, for
   example `/data/advisor-audit.jsonl` on a persistent Space.
+- Set `ADVISOR_AUDIT_FAILURE_MODE=fail` in production. Leave it as `warn` only
+  for local/demo runs where missing storage should not block iteration.
 - For dense/hybrid production retrieval, use Qdrant collections
   `rag_advisor_chunks_dim_1024` and `rag_advisor_chunks_dim_512`, then set
   `RETRIEVAL_MODE=hybrid`, `VECTOR_STORE_BACKEND=qdrant`,
-  `VECTOR_TABLE_NAME=rag_advisor_chunks`, and `EMBEDDING_DIM=1024` or `512`.
-  The LanceDB index remains useful as a local build artifact and fallback.
+  `VECTOR_TABLE_NAME=rag_advisor_chunks_live`, and `EMBEDDING_DIM=1024` or
+  `512`. Promote `rag_advisor_chunks_live_dim_1024` and
+  `rag_advisor_chunks_live_dim_512` as aliases so future reindexes can switch
+  blue/green targets without changing app configuration. The LanceDB index
+  remains useful as a local build artifact and fallback.
 - On Hugging Face Spaces, set `EMBEDDING_PROVIDER=hf` so query embeddings run on
   HF feature extraction instead of `cpu-basic`. Set `PREWARM_RETRIEVER=true` to
   pay embedding setup during startup instead of on the first request.
@@ -188,6 +194,9 @@ Production settings to verify:
   `DEEP_RESEARCH_RETRIEVAL_MODE=lexical` unless you explicitly want the research
   sidecar to spend dense-query latency; the main advisor retrieval can still run
   as `RETRIEVAL_MODE=hybrid`.
+- Use the public Gradio API endpoints `/health` and `/metrics` for uptime and
+  latency checks. They expose non-secret runtime settings, request counts,
+  p50/p95/p99 latency, the last graph timing breakdown, and error counts.
 
 ## Retrieval Modes
 
@@ -233,6 +242,22 @@ This creates or verifies `rag_advisor_chunks_dim_1024` and
 and sets `VECTOR_STORE_BACKEND=qdrant`, `QDRANT_URL`, `QDRANT_API_KEY`, and
 `VECTOR_TABLE_NAME=rag_advisor_chunks` in `.env`. Existing non-matching
 collections are refused unless `--rebuild` is explicitly passed.
+
+Promote those physical collections behind stable live aliases before serving
+production traffic:
+
+```bash
+python3 scripts/qdrant_blue_green_promote.py \
+  --target-table rag_advisor_chunks \
+  --alias-table rag_advisor_chunks_live \
+  --dimensions 1024,512 \
+  --write-env
+```
+
+After promotion, run the app with `VECTOR_TABLE_NAME=rag_advisor_chunks_live` and
+`QDRANT_REQUIRE_ALIASES=true`. A future reindex can upload
+`rag_advisor_chunks_next_dim_1024` and `rag_advisor_chunks_next_dim_512`, smoke
+them, then rerun the promotion command with `--target-table rag_advisor_chunks_next`.
 
 The dense path uses `mixedbread-ai/mxbai-embed-large-v1`, a 1024-dimensional
 Matryoshka-capable embedding model. Run the dimension ablation after dependencies

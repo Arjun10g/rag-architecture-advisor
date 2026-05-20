@@ -39,6 +39,8 @@ jobs:
         run: python scripts/retrieval_smoke.py
       - name: Vector store smoke test
         run: python scripts/vector_store_smoke.py
+      - name: Qdrant alias smoke test
+        run: python scripts/qdrant_alias_smoke.py
       - name: Vector index manifest smoke test
         run: python scripts/vector_index_manifest_smoke.py
       - name: LLM provider smoke test
@@ -47,6 +49,8 @@ jobs:
         run: python scripts/rate_limit_smoke.py
       - name: App formatting smoke test
         run: python scripts/app_formatting_smoke.py
+      - name: Observability smoke test
+        run: python scripts/observability_smoke.py
       - name: Production readiness demo check
         run: python scripts/production_readiness_check.py --profile demo
       - name: Production config smoke test

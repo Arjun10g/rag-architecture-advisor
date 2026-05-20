@@ -56,6 +56,7 @@ def main() -> None:
     env.update(
         {
             "ADVISOR_AUDIT_LOG_PATH": str(audit_path),
+            "ADVISOR_AUDIT_FAILURE_MODE": "fail",
             "DEEP_LATENCY_SLO_P50_MS": "25000",
             "DEEP_LATENCY_SLO_P99_MS": "35000",
             "GRADIO_AUTH_PASSWORD": "smoke-password",
@@ -64,6 +65,7 @@ def main() -> None:
             "LATENCY_SLO_P50_MS": "12000",
             "LATENCY_SLO_P99_MS": "20000",
             "LLM_PROVIDER": "disabled",
+            "QDRANT_REQUIRE_ALIASES": "false",
             "RATE_LIMIT_ENABLED": "true",
             "RATE_LIMIT_MAX_REQUESTS": "100",
             "RATE_LIMIT_WINDOW_SECONDS": "60",

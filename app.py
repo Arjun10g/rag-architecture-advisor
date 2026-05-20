@@ -37,6 +37,17 @@ DetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, 
 ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, str, dict[str, Any]]
 _RATE_LIMIT_EVENTS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
+_METRICS_LOCK = threading.Lock()
+_REQUEST_METRICS: dict[str, Any] = {
+    "total": 0,
+    "errors": 0,
+    "latencies_ms": [],
+    "deep_thinking_total": 0,
+    "generation_status": {},
+    "last_error": None,
+    "last_request_at": None,
+    "last_timings_ms": {},
+}
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -85,6 +96,102 @@ def _enforce_rate_limit(bucket: str) -> None:
 def _reset_rate_limiter_for_tests() -> None:
     with _RATE_LIMIT_LOCK:
         _RATE_LIMIT_EVENTS.clear()
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * percentile)))
+    return round(ordered[index], 2)
+
+
+def _metrics_sample_limit() -> int:
+    return max(10, _env_int("OBSERVABILITY_SAMPLE_LIMIT", 200))
+
+
+def _record_request_metric(
+    *,
+    latency_ms: float,
+    deep_thinking: bool,
+    generation_status: str,
+    timings_ms: dict[str, Any] | None = None,
+    error: Exception | None = None,
+) -> None:
+    with _METRICS_LOCK:
+        _REQUEST_METRICS["total"] += 1
+        _REQUEST_METRICS["last_request_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        _REQUEST_METRICS["last_timings_ms"] = dict(timings_ms or {})
+        if deep_thinking:
+            _REQUEST_METRICS["deep_thinking_total"] += 1
+        statuses = _REQUEST_METRICS["generation_status"]
+        statuses[generation_status] = int(statuses.get(generation_status, 0)) + 1
+        if error is not None:
+            _REQUEST_METRICS["errors"] += 1
+            _REQUEST_METRICS["last_error"] = {
+                "type": type(error).__name__,
+                "message": str(error)[:300],
+            }
+        samples = _REQUEST_METRICS["latencies_ms"]
+        samples.append(round(latency_ms, 2))
+        del samples[:-_metrics_sample_limit()]
+
+
+def metrics_api() -> dict[str, Any]:
+    """Return process-local advisor metrics without exposing request content."""
+    with _METRICS_LOCK:
+        latencies = list(_REQUEST_METRICS["latencies_ms"])
+        return {
+            "requests_total": int(_REQUEST_METRICS["total"]),
+            "errors_total": int(_REQUEST_METRICS["errors"]),
+            "deep_thinking_total": int(_REQUEST_METRICS["deep_thinking_total"]),
+            "generation_status": dict(_REQUEST_METRICS["generation_status"]),
+            "latency_ms": {
+                "count": len(latencies),
+                "p50": _percentile(latencies, 0.50),
+                "p95": _percentile(latencies, 0.95),
+                "p99": _percentile(latencies, 0.99),
+                "max": round(max(latencies), 2) if latencies else None,
+            },
+            "last_request_at": _REQUEST_METRICS["last_request_at"],
+            "last_timings_ms": dict(_REQUEST_METRICS["last_timings_ms"]),
+            "last_error": _REQUEST_METRICS["last_error"],
+        }
+
+
+def health_api() -> dict[str, Any]:
+    """Return a cheap production health/config summary with no secrets."""
+    vector_backend = os.getenv("VECTOR_STORE_BACKEND", "memory").strip().lower()
+    qdrant_configured = bool(os.getenv("QDRANT_URL", "").strip() or os.getenv("QDRANT_LOCAL_PATH", "").strip())
+    auth_error = ""
+    try:
+        auth_configured = bool(_auth_credentials() or _env_bool("EXTERNAL_AUTH_GATEWAY", False))
+    except RuntimeError as exc:
+        auth_configured = False
+        auth_error = str(exc)
+    rate_limit_configured = _env_bool("RATE_LIMIT_ENABLED", False) or _env_bool(
+        "EXTERNAL_RATE_LIMITING",
+        False,
+    )
+    checks = {
+        "llm_provider": os.getenv("LLM_PROVIDER", "hf").strip().lower(),
+        "retrieval_mode": os.getenv("RETRIEVAL_MODE", "lexical").strip().lower(),
+        "vector_store_backend": vector_backend,
+        "vector_store_configured": vector_backend != "qdrant" or qdrant_configured,
+        "embedding_provider": os.getenv("EMBEDDING_PROVIDER", "local").strip().lower(),
+        "auth_configured": auth_configured,
+        "auth_error": auth_error,
+        "rate_limit_configured": rate_limit_configured,
+        "audit_log_configured": bool(os.getenv("ADVISOR_AUDIT_LOG_PATH", "").strip()),
+        "raw_trace_hidden": not _env_bool("SHOW_RAW_TRACE", False),
+    }
+    return {
+        "status": "ok"
+        if checks["vector_store_configured"] and checks["raw_trace_hidden"] and not auth_error
+        else "degraded",
+        "checks": checks,
+        "metrics": metrics_api(),
+    }
 
 
 def _evidence_refs_text(refs: list[str]) -> str:
@@ -671,40 +778,59 @@ def advise_api(
     deep_thinking: bool = False,
 ) -> dict[str, Any]:
     started = time.perf_counter()
-    (
-        recommendation,
-        architecture_decisions,
-        source_rows,
-        deployment_projection,
-        terraform_sketch,
-        advisor_reasoning_trace,
-        research,
-        raw_trace,
-    ) = advise_detailed(user_brief, elicitation_answers, conflict_resolution, deep_thinking)
-    topology = raw_trace.get("draft_output", {}).get("topology") or {}
-    return {
-        "topology": topology.get("name"),
-        "recommendation": recommendation,
-        "architecture_decisions": architecture_decisions,
-        "reasoning_chunks": _public_reasoning_chunks(source_rows),
-        "deployment_projection": deployment_projection,
-        "terraform_sketch": terraform_sketch,
-        "advisor_reasoning_trace": advisor_reasoning_trace,
-        "deep_thinking": bool(raw_trace.get("deep_thinking")),
-        "research": research,
-        "research_findings": _public_research_findings(raw_trace),
-        "research_approach_summaries": _public_research_approach_summaries(raw_trace),
-        "research_links": _public_research_links(raw_trace),
-        "pending_questions": [
-            ATTRIBUTE_LABELS.get(attr, attr)
-            for attr in raw_trace.get("pending_elicitation", [])
-        ],
-        "generation": _public_generation_status(raw_trace),
-        "runtime": {
-            "latency_ms": round((time.perf_counter() - started) * 1000, 2),
-            "graph_timings_ms": raw_trace.get("timings_ms") or {},
-        },
-    }
+    try:
+        (
+            recommendation,
+            architecture_decisions,
+            source_rows,
+            deployment_projection,
+            terraform_sketch,
+            advisor_reasoning_trace,
+            research,
+            raw_trace,
+        ) = advise_detailed(user_brief, elicitation_answers, conflict_resolution, deep_thinking)
+        topology = raw_trace.get("draft_output", {}).get("topology") or {}
+        generation = _public_generation_status(raw_trace)
+        timings_ms = raw_trace.get("timings_ms") or {}
+        latency_ms = round((time.perf_counter() - started) * 1000, 2)
+        payload = {
+            "topology": topology.get("name"),
+            "recommendation": recommendation,
+            "architecture_decisions": architecture_decisions,
+            "reasoning_chunks": _public_reasoning_chunks(source_rows),
+            "deployment_projection": deployment_projection,
+            "terraform_sketch": terraform_sketch,
+            "advisor_reasoning_trace": advisor_reasoning_trace,
+            "deep_thinking": bool(raw_trace.get("deep_thinking")),
+            "research": research,
+            "research_findings": _public_research_findings(raw_trace),
+            "research_approach_summaries": _public_research_approach_summaries(raw_trace),
+            "research_links": _public_research_links(raw_trace),
+            "pending_questions": [
+                ATTRIBUTE_LABELS.get(attr, attr)
+                for attr in raw_trace.get("pending_elicitation", [])
+            ],
+            "generation": generation,
+            "runtime": {
+                "latency_ms": latency_ms,
+                "graph_timings_ms": timings_ms,
+            },
+        }
+        _record_request_metric(
+            latency_ms=latency_ms,
+            deep_thinking=bool(raw_trace.get("deep_thinking")),
+            generation_status=str(generation.get("status") or "unknown"),
+            timings_ms=timings_ms,
+        )
+        return payload
+    except Exception as exc:
+        _record_request_metric(
+            latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            deep_thinking=deep_thinking,
+            generation_status="error",
+            error=exc,
+        )
+        raise
 
 
 def build_demo():
@@ -764,6 +890,10 @@ def build_demo():
                 raw_trace = gr.JSON(label="Raw Trace", visible=False)
         public_api_payload = gr.JSON(label="Public API Response", visible=False)
         public_api_trigger = gr.Button("Public API", visible=False)
+        health_payload = gr.JSON(label="Health Response", visible=False)
+        metrics_payload = gr.JSON(label="Metrics Response", visible=False)
+        health_trigger = gr.Button("Health", visible=False)
+        metrics_trigger = gr.Button("Metrics", visible=False)
 
         outputs = [recommendation, decisions, sources, deployment, terraform, trace, research, raw_trace]
         run.click(
@@ -786,6 +916,22 @@ def build_demo():
             outputs=public_api_payload,
             api_name="advise",
             api_description="Return the public advisor response without raw graph internals.",
+            api_visibility="public",
+        )
+        health_trigger.click(
+            fn=health_api,
+            inputs=None,
+            outputs=health_payload,
+            api_name="health",
+            api_description="Return non-secret runtime health and production-control status.",
+            api_visibility="public",
+        )
+        metrics_trigger.click(
+            fn=metrics_api,
+            inputs=None,
+            outputs=metrics_payload,
+            api_name="metrics",
+            api_description="Return process-local latency/error counters without request text.",
             api_visibility="public",
         )
     return demo

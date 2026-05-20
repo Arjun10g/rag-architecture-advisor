@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - optional local convenience.
 from app import _reset_rate_limiter_for_tests, advise_api
 from llm.provider import DEFAULT_HF_INFERENCE_MODEL
 from retrieval.service import get_retriever
-from retrieval.vector_store import VectorStoreConfig
+from retrieval.vector_store import VectorStoreConfig, table_name_for_dimension
 from scripts.api_output_probe import (
     DEFAULT_BRIEF,
     _validate_deep_research_payload,
@@ -99,6 +99,15 @@ def _audit_log_path_ok() -> tuple[bool, str]:
     if ".cache" in resolved.parts or "eval" in resolved.parts:
         return False, "looks like cache/eval output, not durable audit storage"
     return True, "set"
+
+
+def _audit_failure_mode_ok() -> tuple[bool, str]:
+    mode = os.getenv("ADVISOR_AUDIT_FAILURE_MODE", "warn").strip().lower()
+    if mode not in {"warn", "fail"}:
+        return False, "must be warn or fail"
+    if mode != "fail":
+        return False, "set ADVISOR_AUDIT_FAILURE_MODE=fail for production"
+    return True, "fail"
 
 
 def _vector_manifest_ok(path: Path) -> tuple[bool, str]:
@@ -207,6 +216,64 @@ def _qdrant_manifest_ok(indexes: list[dict[str, Any]], required: set[int]) -> tu
     return True, f"verified Qdrant collections {', '.join(verified)}"
 
 
+def _qdrant_aliases_ok(path: Path) -> tuple[bool, str]:
+    if not path.exists():
+        return False, f"missing {path}"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return False, f"invalid JSON: {exc}"
+    if str(payload.get("backend") or "").lower() != "qdrant":
+        return False, "alias manifest must use backend=qdrant"
+    alias_table = str(payload.get("alias_table") or os.getenv("VECTOR_TABLE_NAME", "")).strip()
+    if not alias_table:
+        return False, "missing alias_table"
+    required = {1024, 512}
+    aliases = payload.get("aliases") or []
+    targets = {
+        int(item.get("dimension") or 0): (
+            str(item.get("alias_collection") or ""),
+            str(item.get("target_collection") or ""),
+        )
+        for item in aliases
+    }
+    if not required.issubset(set(targets)):
+        return False, "alias manifest must include 1024 and 512 dimensions"
+
+    try:
+        from qdrant_client import QdrantClient
+    except ImportError:
+        return False, "qdrant-client is not installed, so Qdrant aliases cannot be verified"
+
+    config = VectorStoreConfig.from_env()
+    try:
+        if config.qdrant_url:
+            client = QdrantClient(
+                url=config.qdrant_url,
+                api_key=config.qdrant_api_key or None,
+                prefer_grpc=config.qdrant_prefer_grpc,
+                timeout=config.qdrant_timeout_seconds,
+            )
+        elif config.qdrant_local_path:
+            client = QdrantClient(path=config.qdrant_local_path, timeout=config.qdrant_timeout_seconds)
+        else:
+            return False, "Qdrant alias verification requires QDRANT_URL or QDRANT_LOCAL_PATH"
+        active_aliases = {item.alias_name: item.collection_name for item in client.get_aliases().aliases}
+    except Exception as exc:
+        return False, f"could not read Qdrant aliases: {exc}"
+
+    verified = []
+    for dimension in sorted(required):
+        alias_name, target_name = targets[dimension]
+        expected_alias = table_name_for_dimension(alias_table, dimension)
+        if alias_name != expected_alias:
+            return False, f"manifest alias {alias_name} does not match runtime alias {expected_alias}"
+        if active_aliases.get(alias_name) != target_name:
+            return False, f"alias {alias_name} points at {active_aliases.get(alias_name)}, expected {target_name}"
+        verified.append(f"{dimension}:{alias_name}->{target_name}")
+    return True, "verified Qdrant aliases " + ", ".join(verified)
+
+
 def _lancedb_table_names(db: Any) -> set[str]:
     if hasattr(db, "list_tables"):
         response = db.list_tables()
@@ -261,6 +328,7 @@ def main() -> None:
     parser.add_argument("--require-auth", action="store_true")
     parser.add_argument("--require-vector-index", action="store_true")
     parser.add_argument("--vector-manifest", default="corpus/index/lancedb/vector_manifest.json")
+    parser.add_argument("--alias-manifest", default="corpus/index/qdrant/alias_manifest.json")
     args = parser.parse_args()
 
     if load_dotenv:
@@ -307,6 +375,8 @@ def main() -> None:
         )
         ok, detail = _audit_log_path_ok()
         _check("audit_log_path", ok, detail, checks)
+        ok, detail = _audit_failure_mode_ok()
+        _check("audit_failure_mode", ok, detail, checks)
         ok, detail = _latency_slo_ok()
         _check("latency_slo_standard", ok, detail, checks)
         ok, detail = _latency_slo_ok("DEEP_")
@@ -357,6 +427,9 @@ def main() -> None:
     if args.require_vector_index:
         ok, detail = _vector_manifest_ok(Path(args.vector_manifest))
         _check("vector_manifest", ok, detail, checks)
+    if _env_bool("QDRANT_REQUIRE_ALIASES"):
+        ok, detail = _qdrant_aliases_ok(Path(args.alias_manifest))
+        _check("qdrant_aliases", ok, detail, checks)
 
     failures = [check for check in checks if not check["ok"]]
     print(

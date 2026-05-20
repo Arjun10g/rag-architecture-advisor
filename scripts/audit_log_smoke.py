@@ -6,6 +6,11 @@ from pathlib import Path
 import sys
 import tempfile
 
+os.environ["LLM_PROVIDER"] = "disabled"
+os.environ["PREWARM_RETRIEVER"] = "false"
+os.environ["RETRIEVAL_MODE"] = "lexical"
+os.environ["VECTOR_STORE_BACKEND"] = "memory"
+
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 

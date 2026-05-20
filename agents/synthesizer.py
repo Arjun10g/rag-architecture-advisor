@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import threading
 
 from graph.state import AdvisorState
 from llm.provider import LLMProviderUnavailable, get_provider
@@ -22,6 +23,7 @@ SPECIALIST_ORDER = {
     "cloud_iac": 2,
     "evaluation": 3,
 }
+_AUDIT_LOCK = threading.Lock()
 
 AREA_LABELS = {
     "retrieval_strategy": "Retrieval strategy",
@@ -875,14 +877,26 @@ def _audit_record(
     }
 
 
-def _maybe_write_audit(record: dict) -> None:
+def _maybe_write_audit(record: dict) -> dict:
     path = os.getenv("ADVISOR_AUDIT_LOG_PATH", "").strip()
     if not path:
-        return
+        return {"status": "disabled"}
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, sort_keys=True) + "\n")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with _AUDIT_LOCK:
+            with target.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, sort_keys=True) + "\n")
+        return {"status": "written", "path": target.as_posix()}
+    except Exception as exc:
+        status = {
+            "status": "failed",
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:300],
+        }
+        if os.getenv("ADVISOR_AUDIT_FAILURE_MODE", "warn").strip().lower() == "fail":
+            raise RuntimeError(f"Audit log write failed for {target}") from exc
+        return status
 
 
 def synthesize(state: AdvisorState) -> dict:
@@ -903,7 +917,7 @@ def synthesize(state: AdvisorState) -> dict:
         evidence_pack,
         generation,
     )
-    _maybe_write_audit(audit_record)
+    audit_write = _maybe_write_audit(audit_record)
     return {
         "topology": topology,
         "projection": projection,
@@ -918,4 +932,5 @@ def synthesize(state: AdvisorState) -> dict:
         "generated_answer": generated_answer,
         "generation": generation,
         "audit_record": audit_record,
+        "audit_write": audit_write,
     }
