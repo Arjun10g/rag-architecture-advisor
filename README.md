@@ -26,6 +26,9 @@ Track B is what the app produces: selected RAG topology, linked pipeline and dep
 - At app startup, `ingestion/build_index.py` reads the manifest and chunks the
   markdown into an in-memory `FileChunkStore`; the default lexical retriever does
   not require a persistent database.
+- Deployment-grade dense retrieval now has an optional LanceDB backend. Set
+  `VECTOR_STORE_BACKEND=lancedb` to read/write a persisted vector table under
+  `VECTOR_INDEX_DIR` while keeping the lexical path available as the safe default.
 - Optional generated artifacts are ignored: `.cache/` for embedding/vector
   caches, `corpus/index/` for future local indexes, and `eval/results/` for
   ablation outputs.
@@ -46,6 +49,7 @@ Track B is what the app produces: selected RAG topology, linked pipeline and dep
 
 ```bash
 python3 -m compileall app.py graph agents retrieval ingestion synth llm eval scripts
+python3 scripts/vector_store_smoke.py
 python3 scripts/app_formatting_smoke.py
 python3 eval/harness.py --gate
 python3 eval/harness.py --gold eval/gold/v0_4_answer_quality.json --gate
@@ -61,6 +65,25 @@ coverage metrics.
 The default `RETRIEVAL_MODE=lexical` path is dependency-light and used by CI. For
 dense retrieval experiments, copy `.env.example` into `.env`, install
 `requirements.txt`, and switch to `RETRIEVAL_MODE=dense` or `RETRIEVAL_MODE=hybrid`.
+
+Use `VECTOR_STORE_BACKEND=memory` for quick local experiments. Use LanceDB for
+actual deployment or repeatable dense evaluation. The build command stores both
+1024- and 512-dimensional Matryoshka indexes by default as separate tables
+(`chunks_dim_1024` and `chunks_dim_512`), so switching `EMBEDDING_DIM` does not
+force a rebuild:
+
+```bash
+python3 scripts/build_vector_index.py --backend lancedb --dimensions 1024,512 --rebuild
+```
+
+Then run with:
+
+```bash
+RETRIEVAL_MODE=hybrid
+VECTOR_STORE_BACKEND=lancedb
+VECTOR_INDEX_DIR=corpus/index/lancedb
+EMBEDDING_DIM=1024  # or 512 to select chunks_dim_512
+```
 
 The dense path uses `mixedbread-ai/mxbai-embed-large-v1`, a 1024-dimensional
 Matryoshka-capable embedding model. Run the dimension ablation after dependencies

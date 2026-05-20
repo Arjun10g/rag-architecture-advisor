@@ -9,6 +9,7 @@ from retrieval.chunking import Chunk
 from retrieval.embeddings import DenseVectorIndex, EmbeddingConfig, EmbeddingUnavailable
 from retrieval.index import HybridRetriever, SearchResult, reciprocal_rank_fusion
 from retrieval.rerank import ColbertReranker, RerankerUnavailable
+from retrieval.vector_store import LanceDBVectorIndex, VectorStoreConfig, VectorStoreUnavailable
 
 
 try:
@@ -33,7 +34,7 @@ class Retriever(Protocol):
 
 
 class DenseOnlyRetriever:
-    def __init__(self, dense: DenseVectorIndex):
+    def __init__(self, dense: Retriever):
         self.dense = dense
 
     def search(
@@ -50,7 +51,7 @@ class DenseHybridRetriever:
     def __init__(
         self,
         lexical: HybridRetriever,
-        dense: DenseVectorIndex,
+        dense: Retriever,
         *,
         lexical_top_k: int = 100,
         dense_top_k: int = 100,
@@ -136,6 +137,7 @@ def build_retriever(
     mode: str = "lexical",
     embedding_config: EmbeddingConfig | None = None,
     embedding_dimension: int | None = None,
+    vector_store_config: VectorStoreConfig | None = None,
     rebuild_embeddings: bool = False,
     allow_fallback: bool = True,
 ) -> Retriever:
@@ -147,13 +149,14 @@ def build_retriever(
         retriever: Retriever = lexical
     elif base_mode in {"dense", "hybrid"}:
         try:
-            dense = DenseVectorIndex.from_chunks(
+            dense = _build_dense_index(
                 chunks,
-                config=embedding_config,
+                embedding_config=embedding_config,
                 dimension=embedding_dimension,
+                vector_store_config=vector_store_config,
                 rebuild=rebuild_embeddings,
             )
-        except EmbeddingUnavailable:
+        except (EmbeddingUnavailable, VectorStoreUnavailable):
             if allow_fallback:
                 retriever = lexical
                 dense = None
@@ -197,6 +200,7 @@ def get_retriever() -> Retriever:
         mode=os.getenv("RETRIEVAL_MODE", "lexical"),
         embedding_config=EmbeddingConfig.from_env(),
         embedding_dimension=_optional_env_int("EMBEDDING_DIM"),
+        vector_store_config=VectorStoreConfig.from_env(),
         allow_fallback=os.getenv("RETRIEVAL_STRICT_DENSE", "false").lower() != "true",
     )
 
@@ -229,3 +233,33 @@ def _env_float(key: str, default: float) -> float:
     if value is None or not value.strip():
         return default
     return float(value)
+
+
+def _build_dense_index(
+    chunks: list[Chunk],
+    *,
+    embedding_config: EmbeddingConfig | None,
+    dimension: int | None,
+    vector_store_config: VectorStoreConfig | None,
+    rebuild: bool,
+) -> Retriever:
+    vector_store_config = vector_store_config or VectorStoreConfig.from_env()
+    backend = vector_store_config.normalized_backend
+    if backend in {"memory", "in_memory", "local"}:
+        return DenseVectorIndex.from_chunks(
+            chunks,
+            config=embedding_config,
+            dimension=dimension,
+            rebuild=rebuild,
+        )
+    if backend in {"lance", "lancedb"}:
+        return LanceDBVectorIndex.from_chunks(
+            chunks,
+            store_config=vector_store_config,
+            embedding_config=embedding_config,
+            dimension=dimension,
+            rebuild=rebuild,
+        )
+    raise VectorStoreUnavailable(
+        f"Unknown VECTOR_STORE_BACKEND {vector_store_config.backend!r}; expected memory or lancedb."
+    )

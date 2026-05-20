@@ -21,6 +21,8 @@ jobs:
         run: python scripts/ingestion_smoke.py
       - name: Retrieval smoke test
         run: python scripts/retrieval_smoke.py
+      - name: Vector store smoke test
+        run: python scripts/vector_store_smoke.py
       - name: App formatting smoke test
         run: python scripts/app_formatting_smoke.py
       - name: Gold-set eval gate
