@@ -1,0 +1,30 @@
+# Keep Hugging Face uploads focused on the runtime app surface.
+.git/
+.github/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+
+# Developer-only checks and local/generated artifacts are kept in GitHub.
+eval/
+infra/
+scripts/
+corpus/index/
+eval/results/
+.cache/
+
+# Raw source bundles that are normalized into corpus/.
+Implementation Guide/
+router domains/
+chunking_parsing_md/
+chunking_parsing_rag_evaluation_lit_review_md/
+cost_modeling_vector_rag_md_bundle/
+iac_provisioning_ml_rag_md/
+matching_retrieval_reranking_cloud_mapping_md/
+neural_search_matching_pipelines_reranking_md/
+rag_context_grounding_compression_md_files/
+rag_design_choices_report_02_md/
+rag_reference_architectures_md/
+rag_security_governance_md/
+vector_ops_freshness_md/

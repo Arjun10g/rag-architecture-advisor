@@ -1,0 +1,8 @@
+# Keep public GitHub language and diff views focused on the application code.
+corpus/** linguist-vendored
+eval/gold/** linguist-generated
+*.json linguist-generated
+
+# Runtime generated files should never need large diffs when reviewed.
+corpus/index/** linguist-generated
+eval/results/** linguist-generated
