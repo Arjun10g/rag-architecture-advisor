@@ -14,7 +14,7 @@ os.environ["ADVISOR_USAGE_COUNTER_PATH"] = ""
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from app import _reset_rate_limiter_for_tests, advise_api
+from app import _reset_rate_limiter_for_tests, advise_api, advise_detailed_ui
 
 
 def _set_env(key: str, value: str, previous: dict[str, str | None]) -> None:
@@ -48,6 +48,16 @@ def main() -> None:
                 raise
         else:
             raise AssertionError("rate limiter did not reject the second request")
+
+        _reset_rate_limiter_for_tests()
+        advise_detailed_ui("Build an internal API docs assistant over fast-moving SDK docs.")
+        try:
+            advise_detailed_ui("Build an internal API docs assistant over fast-moving SDK docs.")
+        except Exception as exc:
+            if "Too many tries" not in str(exc):
+                raise
+        else:
+            raise AssertionError("UI rate limiter did not show a friendly rejection")
     finally:
         _reset_rate_limiter_for_tests()
         _restore(previous)

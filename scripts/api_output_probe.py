@@ -255,6 +255,7 @@ def _validate_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
     _require(A_CODE_RE.search(public_text) is None, "public API leaked raw requirement attribute codes")
 
     recommendation = str(payload.get("recommendation") or "")
+    design_plan = str(payload.get("design_plan") or "")
     decisions = str(payload.get("architecture_decisions") or "")
     trace = str(payload.get("advisor_reasoning_trace") or "")
     deployment = str(payload.get("deployment_projection") or "")
@@ -264,6 +265,20 @@ def _validate_public_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     _require("Two-stage hybrid" in recommendation, "recommendation is missing the selected topology")
     _require("Agentic Reasoning Trace" in recommendation, "recommendation is missing agentic reasoning")
+    for heading in (
+        "Embedding Model",
+        "Embedding Dimension",
+        "Chunking Strategy",
+        "Pooling Strategy",
+        "Vector Database",
+        "Retrieval Methods",
+        "Re-Ranking Strategy",
+        "Context For Generation",
+        "Evaluation Sets",
+    ):
+        _require(heading in design_plan, f"design plan is missing {heading}")
+    for metric in ("Recall@k", "MRR", "nDCG", "p50/p95/p99"):
+        _require(metric in design_plan, f"design plan is missing evaluation metric {metric}")
     _require("Retrieval Strategy" in decisions, "architecture decisions are missing retrieval reasoning")
     _require("Accepted Tradeoff" in decisions, "architecture decisions are missing tradeoffs")
     _require("Evidence Summaries" in decisions, "architecture decisions are missing evidence summaries")

@@ -63,8 +63,8 @@ def main() -> None:
     deep_summary = _validate_deep_research_payload(public)
 
     detailed = advise_detailed(DEFAULT_BRIEF, deep_thinking=True)
-    _require("Deep Research Agents" in detailed[6], "research tab did not render agent findings")
-    _require("Ran deep research agents" in detailed[5], "trace tab did not explain research agents")
+    _require("Deep Research Agents" in detailed[7], "research tab did not render agent findings")
+    _require("Ran deep research agents" in detailed[6], "trace tab did not explain research agents")
 
     print(
         json.dumps(

@@ -147,8 +147,8 @@ PUBLIC_NOTICE_MD = """
 - Deep thinking reads selected public references and may take longer than a standard run.
 """
 
-DetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
-ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, str, dict[str, Any]]
+DetailResponse = tuple[str, str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
+ClearDetailResponse = tuple[str, str, str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
 _RATE_LIMIT_EVENTS: dict[str, deque[float]] = {}
 _RATE_LIMIT_LOCK = threading.Lock()
 _METRICS_LOCK = threading.Lock()
@@ -856,6 +856,199 @@ def _format_recommendation(state: AdvisorState) -> str:
     return "\n".join(line for line in lines if line is not None)
 
 
+def _decision_by_area(state: AdvisorState) -> dict[str, dict[str, Any]]:
+    decisions = (state.draft_output or {}).get("architecture_decisions") or []
+    return {str(decision.get("area") or ""): decision for decision in decisions}
+
+
+def _decision_text(
+    decisions: dict[str, dict[str, Any]],
+    area: str,
+    fallback: str,
+    field: str = "choice",
+) -> str:
+    value = decisions.get(area, {}).get(field)
+    return str(value or fallback)
+
+
+def _format_design_plan_section(
+    *,
+    title: str,
+    recommendation: str,
+    why: list[str],
+    validation: str,
+) -> list[str]:
+    lines = [f"### {title}", f"**Recommendation:** {recommendation}", "", "**Why:**"]
+    lines.extend(f"- {item}" for item in why if item)
+    lines.extend(["", f"**Validation:** {validation}", ""])
+    return lines
+
+
+def _format_design_plan(state: AdvisorState) -> str:
+    decisions = _decision_by_area(state)
+    embedding_model = _env_str("EMBEDDING_MODEL", "mixedbread-ai/mxbai-embed-large-v1")
+    generation_model = _env_str("HF_INFERENCE_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
+    vector_backend = _env_str("VECTOR_STORE_BACKEND", "qdrant").upper()
+    retrieval_mode = _env_str("RETRIEVAL_MODE", "hybrid").replace("_", " ")
+
+    lines = [
+        "## RAG Implementation Design Plan",
+        "This is the build-facing version of the recommendation: each choice states what to use, why it follows from the literature-grounded evidence, and how to prove it with evaluation.",
+        "",
+    ]
+    lines.extend(
+        _format_design_plan_section(
+            title="Embedding Model",
+            recommendation=(
+                f"Use `{embedding_model}` or another large Matryoshka-capable embedding model "
+                "for the main semantic index."
+            ),
+            why=[
+                "A single Matryoshka model lets the system compare quality and speed profiles without changing the representation family.",
+                "A larger model is appropriate because the target briefs emphasize technical terminology, citations, and mixed markdown/code sources.",
+                "Keeping one model family reduces a common eval trap: dimension changes should be tested without simultaneously changing model behavior.",
+            ],
+            validation=(
+                "Run retrieval gold cases at each dimension and compare Recall@k, MRR, nDCG, "
+                "citation coverage, p50/p95/p99 latency, and storage cost."
+            ),
+        )
+    )
+    lines.extend(
+        _format_design_plan_section(
+            title="Embedding Dimension",
+            recommendation=_decision_text(
+                decisions,
+                "embedding_dimension",
+                "Store both 1024d and 512d vectors so quality and speed can be switched without rebuilding.",
+            ),
+            why=[
+                "1024d is the quality profile when fine-grained ranking signal matters.",
+                "512d is the speed and cost profile for public traffic or tighter latency budgets.",
+                "Both dimensions should remain available until ablations show the cheaper profile preserves enough recall.",
+            ],
+            validation="Keep separate vector collections or aliases for 1024d and 512d, then gate the default with dimension ablation reports.",
+        )
+    )
+    lines.extend(
+        _format_design_plan_section(
+            title="Chunking Strategy",
+            recommendation=(
+                "Use fence-aware Markdown structural chunking with heading breadcrumbs, line provenance, "
+                "atomic code fences, tables, lists, and cleaned evidence summaries."
+            ),
+            why=[
+                "The corpus is mostly literature-style markdown, so section-aware chunks preserve argument structure better than fixed windows.",
+                "Code fences and tables must be treated as atomic blocks so the retriever does not split examples or misread code comments as headings.",
+                "Line provenance and short summaries make citations usable without showing raw file names to users.",
+            ],
+            validation=(
+                "Create chunk-inspection cases for headings, fenced code, tables, lists, and front matter; "
+                "then verify expected evidence is retrieved by section, not by accidental filename match."
+            ),
+        )
+    )
+    lines.extend(
+        _format_design_plan_section(
+            title="Pooling Strategy",
+            recommendation=(
+                "Use the embedding provider's model-native sentence pooling with normalized vectors; "
+                "avoid custom token pooling in the standard serving path."
+            ),
+            why=[
+                "Provider-native pooling keeps the embedding distribution aligned with the model's training recipe.",
+                "Normalized vectors keep cosine-style matching stable across local, Qdrant, and ablation runs.",
+                "Late-interaction pooling should be reserved for a ColBERT-style experiment, not mixed into the default path.",
+            ],
+            validation="Compare model-native pooling against any experimental pooling only in an explicit ablation with the same gold queries.",
+        )
+    )
+    lines.extend(
+        _format_design_plan_section(
+            title="Vector Database",
+            recommendation=_decision_text(
+                decisions,
+                "vector_database",
+                (
+                    f"Use {vector_backend} with non-overwriting collections for 1024d and 512d, "
+                    "metadata filters, and blue-green aliases."
+                ),
+            ),
+            why=[
+                "A production deployment needs durable vector storage, payload metadata, and safe index promotion.",
+                "Separate dimension collections avoid corrupting an existing index when new embeddings are built.",
+                "Metadata filters are the deployment hook for namespace, domain, sensitivity, and tenant controls.",
+            ],
+            validation="Smoke both dimension collections, query aliases, and verify no existing collection is overwritten during bootstrap.",
+        )
+    )
+    lines.extend(
+        _format_design_plan_section(
+            title="Retrieval Methods",
+            recommendation=_decision_text(
+                decisions,
+                "retrieval_strategy",
+                f"Use {retrieval_mode} retrieval: lexical exact-match candidates plus dense semantic candidates fused with reciprocal rank fusion.",
+            ),
+            why=[
+                "Lexical retrieval protects exact API, control, and implementation terms.",
+                "Dense retrieval improves semantic recall when users phrase the same design idea differently than the corpus.",
+                "Fusion gives the reranker a broader candidate set without trusting either retriever alone.",
+            ],
+            validation="Ablate lexical-only, dense-only, hybrid, and hybrid-plus-rerank on the same retrieval gold set.",
+        )
+    )
+    lines.extend(
+        _format_design_plan_section(
+            title="Re-Ranking Strategy",
+            recommendation=_decision_text(
+                decisions,
+                "reranking",
+                "Rerank a bounded candidate fanout before context packing, then apply source caps and diversity constraints.",
+            ),
+            why=[
+                "Candidate generation should optimize recall; reranking should decide which evidence is precise enough for generation.",
+                "A bounded fanout keeps latency measurable for public traffic.",
+                "Reranking should be optional by profile so strict-latency deployments can fall back cleanly.",
+            ],
+            validation="Track Recall@k before rerank, nDCG/MRR after rerank, and p50/p95/p99 latency with and without the reranker.",
+        )
+    )
+    lines.extend(
+        _format_design_plan_section(
+            title="Context For Generation",
+            recommendation=(
+                "Pack concise evidence summaries with labels like [E1], not file names; synthesize with "
+                f"`{generation_model}` and include the reasoning behind each architecture decision."
+            ),
+            why=[
+                "The generator should reason over selected literature claims, not raw top-k chunks.",
+                "Evidence labels preserve auditability while keeping the user-facing answer clean.",
+                "Deep thinking should add full-reference approach summaries only when the user asks for slower research synthesis.",
+            ],
+            validation="Evaluate answer faithfulness, citation support, missing-decision coverage, and whether evidence summaries remain readable.",
+        )
+    )
+    lines.extend(
+        [
+            "### Evaluation Sets",
+            "**Develop the gold sets as small, labeled contracts before scaling them.**",
+            "",
+            "- Routing and topology set: briefs with expected requirement interpretation, selected topology, and pending questions.",
+            "- Retrieval set: query-to-evidence labels with relevant sections, hard negatives, exact-term cases, paraphrases, and stale-doc traps.",
+            "- Reranking set: candidate lists where the correct literature chunk must move above plausible but weaker chunks.",
+            "- Answer set: expected recommendations, required tradeoffs, required citations, forbidden claims, and acceptable uncertainty.",
+            "- Security and public-surface set: permission-denied chunks, no raw internals, metrics token protection, rate-limit behavior, and anonymous quota behavior.",
+            "- Latency and cost set: fixed probes for standard and deep-thinking runs with p50, p95, p99, error rate, and generation status.",
+            "",
+            "**How to grow them:** start with 50-100 representative briefs, add every production failure as a regression case, tag each item by domain and risk, and keep labels tied to evidence meaning rather than raw filenames.",
+            "",
+            "**Primary metrics:** topology accuracy, routing coverage, Recall@k, MRR, nDCG, citation coverage, faithfulness, missing-required-decision rate, p50/p95/p99 latency, error rate, and cost per 1K runs.",
+        ]
+    )
+    return "\n".join(lines).strip()
+
+
 def _format_architecture_decisions(state: AdvisorState) -> str:
     decisions = (state.draft_output or {}).get("architecture_decisions") or []
     if not decisions:
@@ -1208,11 +1401,11 @@ def _terraform(state: AdvisorState) -> str:
 def _empty_detail_response(
     message: str,
 ) -> DetailResponse:
-    return message, "", [], "", "", "", "", {}
+    return message, "", "", [], "", "", "", "", {}
 
 
 def clear_detail_response() -> ClearDetailResponse:
-    return "", "", [], "", "", "", "", "", {}
+    return "", "", "", "", [], "", "", "", "", {}
 
 
 def advise(user_brief: str, request: gr.Request | None = None) -> tuple[str, dict[str, Any]]:
@@ -1256,6 +1449,7 @@ def advise_detailed(
     )
     return (
         _format_recommendation(state),
+        _format_design_plan(state),
         _format_architecture_decisions(state),
         _source_rows(state),
         _format_deployment(state),
@@ -1264,6 +1458,49 @@ def advise_detailed(
         _format_research(state),
         state.to_dict(),
     )
+
+
+def _friendly_error_message(exc: Exception) -> str:
+    message = str(exc) or "The advisor could not complete this run."
+    normalized = message.lower()
+    if "rate limit exceeded" in normalized:
+        return f"Too many tries. {message}"
+    if "budget has been reached" in normalized:
+        return "This public quota has been used for now. Please try again later."
+    if "deep thinking is currently disabled" in normalized:
+        return "Deep thinking is not available in this deployment."
+    if "is too long" in normalized:
+        return message
+    if "metrics endpoint" in normalized:
+        return "That endpoint requires a valid operations token."
+    return "The advisor could not complete this run. Please try a shorter brief or try again later."
+
+
+def _raise_ui_error(exc: Exception) -> None:
+    message = _friendly_error_message(exc)
+    if gr is not None and hasattr(gr, "Error"):
+        raise gr.Error(message) from exc
+    raise RuntimeError(message) from exc
+
+
+def advise_detailed_ui(
+    user_brief: str,
+    elicitation_answers: str | None = None,
+    conflict_resolution: str | None = None,
+    deep_thinking: bool = False,
+    request: gr.Request | None = None,
+) -> DetailResponse:
+    try:
+        return advise_detailed(
+            user_brief,
+            elicitation_answers,
+            conflict_resolution,
+            deep_thinking,
+            request,
+        )
+    except Exception as exc:
+        _raise_ui_error(exc)
+        raise
 
 
 def advise_api(
@@ -1278,6 +1515,7 @@ def advise_api(
     try:
         (
             recommendation,
+            design_plan,
             architecture_decisions,
             source_rows,
             deployment_projection,
@@ -1293,6 +1531,7 @@ def advise_api(
         payload = {
             "topology": topology.get("name"),
             "recommendation": recommendation,
+            "design_plan": design_plan,
             "architecture_decisions": architecture_decisions,
             "reasoning_chunks": _public_reasoning_chunks(source_rows),
             "deployment_projection": deployment_projection,
@@ -1384,7 +1623,8 @@ def build_demo():
                 gr.Markdown(public_notice, elem_classes=["advisor-notice"])
                 with gr.Accordion("Operational boundary", open=False):
                     gr.Markdown(
-                        "Public runs are rate limited. Standard mode is the default. "
+                        "Public runs are rate limited and will show a wait-time popup when a quota is hit. "
+                        "Standard mode is the default. "
                         + (
                             "Deep thinking is reserved for briefs that need full-reference "
                             "research synthesis."
@@ -1396,6 +1636,8 @@ def build_demo():
         with gr.Tabs(elem_classes=["advisor-tabs"]):
             with gr.Tab("Recommendation"):
                 recommendation = gr.Markdown(label="Recommendation")
+            with gr.Tab("Design Plan"):
+                design_plan = gr.Markdown(label="RAG Implementation Design Plan")
             with gr.Tab("Architecture"):
                 decisions = gr.Markdown(label="Architecture Decisions")
             with gr.Tab("Evidence"):
@@ -1426,9 +1668,19 @@ def build_demo():
         metrics_trigger = gr.Button("Metrics", visible=False)
         metrics_token = gr.Textbox(label="Metrics Token", visible=False)
 
-        outputs = [recommendation, decisions, sources, deployment, terraform, trace, research, raw_trace]
+        outputs = [
+            recommendation,
+            design_plan,
+            decisions,
+            sources,
+            deployment,
+            terraform,
+            trace,
+            research,
+            raw_trace,
+        ]
         run.click(
-            fn=advise_detailed,
+            fn=advise_detailed_ui,
             inputs=[brief, elicitation_answers, conflict_resolution, deep_thinking],
             outputs=outputs,
             api_name="advise_detailed",
