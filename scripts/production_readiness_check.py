@@ -64,6 +64,15 @@ def _env_bool(key: str) -> bool:
     return os.getenv(key, "").lower().strip() in {"1", "true", "yes", "on"}
 
 
+def _deep_thinking_enabled() -> bool:
+    return os.getenv("DEEP_THINKING_ENABLED", "true").lower().strip() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _env_float(key: str) -> float | None:
     value = os.getenv(key)
     if value is None or not value.strip():
@@ -181,7 +190,7 @@ def _cost_controls_ok() -> tuple[bool, str]:
     deep_limit = _env_int("RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS", standard_limit)
     if deep_limit > standard_limit:
         return False, "deep-thinking request limit cannot exceed the standard limit"
-    if os.getenv("DEEP_THINKING_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"} and deep_limit <= 0:
+    if _deep_thinking_enabled() and deep_limit <= 0:
         return False, "deep-thinking limit must be positive when deep thinking is enabled"
     return True, f"standard_limit={standard_limit} deep_limit={deep_limit}"
 
@@ -210,7 +219,7 @@ def _usage_budget_ok() -> tuple[bool, str]:
         return False, "DAILY_REQUEST_BUDGET and MONTHLY_REQUEST_BUDGET must be positive"
     if daily > monthly:
         return False, "DAILY_REQUEST_BUDGET cannot exceed MONTHLY_REQUEST_BUDGET"
-    if _env_bool("DEEP_THINKING_ENABLED"):
+    if _deep_thinking_enabled():
         daily_deep = _env_int("DAILY_DEEP_REQUEST_BUDGET", 0)
         monthly_deep = _env_int("MONTHLY_DEEP_REQUEST_BUDGET", 0)
         if daily_deep <= 0 or monthly_deep <= 0:
@@ -222,7 +231,7 @@ def _anonymous_controls_ok() -> tuple[bool, str]:
     mode = os.getenv("PUBLIC_ACCESS_MODE", "private").strip().lower()
     if mode != "anonymous":
         return True, "not anonymous mode"
-    if _env_bool("DEEP_THINKING_ENABLED"):
+    if _deep_thinking_enabled():
         return False, "anonymous mode must set DEEP_THINKING_ENABLED=false"
     logging_ok, logging_detail = _request_logging_ok()
     if not logging_ok:
@@ -432,7 +441,7 @@ def _validate_direct_public_api() -> tuple[bool, str]:
         payload = advise_api(DEFAULT_BRIEF)
         summary = _validate_public_payload(payload)
         deep_summary: dict[str, Any] = {"research_links": "disabled"}
-        if _env_bool("DEEP_THINKING_ENABLED"):
+        if _deep_thinking_enabled():
             deep_payload = advise_api(DEFAULT_BRIEF, deep_thinking=True)
             deep_summary = _validate_public_payload(deep_payload)
             _validate_deep_research_payload(deep_payload)
@@ -551,7 +560,7 @@ def main() -> None:
         _check("latency_slo_standard", ok, detail, checks)
         ok, detail = (
             (True, "deep thinking disabled")
-            if not _env_bool("DEEP_THINKING_ENABLED")
+            if not _deep_thinking_enabled()
             else _latency_slo_ok("DEEP_")
         )
         _check("latency_slo_deep_thinking", ok, detail, checks)
