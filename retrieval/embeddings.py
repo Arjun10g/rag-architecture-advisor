@@ -141,8 +141,40 @@ class DenseVectorIndex:
         namespace: str | None = None,
         filters: dict[str, str] | None = None,
     ) -> list[SearchResult]:
+        return self._search_with_vector(
+            self.embedder.encode([query], is_query=True, dimension=self.dimension)[0],
+            top_k=top_k,
+            namespace=namespace,
+            filters=filters,
+        )
+
+    def search_many(
+        self,
+        queries: list[str],
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        query_vectors = self.embedder.encode(queries, is_query=True, dimension=self.dimension)
+        return [
+            self._search_with_vector(
+                query_vector,
+                top_k=top_k,
+                namespace=namespace,
+                filters=filters,
+            )
+            for query_vector in query_vectors
+        ]
+
+    def _search_with_vector(
+        self,
+        query_vector: list[float],
+        *,
+        top_k: int,
+        namespace: str | None,
+        filters: dict[str, str] | None,
+    ) -> list[SearchResult]:
         filters = filters or {}
-        query_vector = self.embedder.encode([query], is_query=True, dimension=self.dimension)[0]
         scored: list[SearchResult] = []
         for chunk, vector in zip(self.chunks, self.vectors):
             if namespace and chunk.metadata.get("namespace") != namespace:

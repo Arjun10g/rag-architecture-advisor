@@ -247,6 +247,18 @@ class HybridRetriever:
                 scored.append(SearchResult(chunk=chunk, score=score))
         return sorted(scored, key=lambda item: item.score, reverse=True)[:top_k]
 
+    def search_many(
+        self,
+        queries: list[str],
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        return [
+            self.search(query, top_k=top_k, namespace=namespace, filters=filters)
+            for query in queries
+        ]
+
     def _score_chunk(self, query: QueryFeatures, indexed: IndexedChunk) -> float:
         if not query.terms or not indexed.terms:
             return 0.0

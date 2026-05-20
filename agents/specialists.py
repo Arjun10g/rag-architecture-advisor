@@ -6,7 +6,7 @@ from typing import Callable
 from graph.edges import SPECIALIST_NAMES
 from graph.state import AdvisorState, Finding, SourceRef
 from retrieval.index import SearchResult
-from retrieval.service import retrieve
+from retrieval.service import get_retriever, retrieve
 
 
 FOCUS_QUERIES = {
@@ -61,6 +61,19 @@ def _run_specialist(
 ) -> Finding:
     query = f"{user_brief} {FOCUS_QUERIES[name]}"
     results = retrieve_fn(query, "knowledge", 8, None)
+    return _finding_from_results(
+        name,
+        results=results,
+        pending_elicitation=pending_elicitation,
+    )
+
+
+def _finding_from_results(
+    name: str,
+    *,
+    results: list[SearchResult],
+    pending_elicitation: list[str],
+) -> Finding:
     sources = [_source_ref(result) for result in results]
     source_ids = [source.source_id for source in sources]
     top_sections = [
@@ -92,6 +105,11 @@ def run_specialists(
     state: AdvisorState,
     retrieve_fn: RetrieveFn | None = None,
 ) -> dict[str, Finding]:
+    if retrieve_fn is None:
+        batched = _run_specialists_batched(state)
+        if batched is not None:
+            return batched
+
     retrieve_fn = retrieve_fn or retrieve
     findings: dict[str, Finding] = {}
     pending_elicitation = list(state.pending_elicitation)
@@ -114,3 +132,26 @@ def run_specialists(
                 findings[name] = _failed_finding(name, exc, pending_elicitation)
 
     return {name: findings[name] for name in SPECIALIST_NAMES}
+
+
+def _run_specialists_batched(state: AdvisorState) -> dict[str, Finding] | None:
+    retriever = get_retriever()
+    search_many = getattr(retriever, "search_many", None)
+    if search_many is None:
+        return None
+
+    pending_elicitation = list(state.pending_elicitation)
+    names = list(SPECIALIST_NAMES)
+    queries = [f"{state.user_brief} {FOCUS_QUERIES[name]}" for name in names]
+    try:
+        result_batches = search_many(queries, top_k=8, namespace="knowledge", filters=None)
+    except Exception:
+        return None
+    return {
+        name: _finding_from_results(
+            name,
+            results=results,
+            pending_elicitation=pending_elicitation,
+        )
+        for name, results in zip(names, result_batches)
+    }

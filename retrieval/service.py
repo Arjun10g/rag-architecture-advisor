@@ -38,6 +38,17 @@ class Retriever(Protocol):
         ...
 
 
+class BatchRetriever(Retriever, Protocol):
+    def search_many(
+        self,
+        queries: list[str],
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        ...
+
+
 class DenseOnlyRetriever:
     def __init__(self, dense: Retriever):
         self.dense = dense
@@ -50,6 +61,20 @@ class DenseOnlyRetriever:
         filters: dict[str, str] | None = None,
     ) -> list[SearchResult]:
         return self.dense.search(query, top_k=top_k, namespace=namespace, filters=filters)
+
+    def search_many(
+        self,
+        queries: list[str],
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        if hasattr(self.dense, "search_many"):
+            return self.dense.search_many(queries, top_k=top_k, namespace=namespace, filters=filters)
+        return [
+            self.search(query, top_k=top_k, namespace=namespace, filters=filters)
+            for query in queries
+        ]
 
 
 class DenseHybridRetriever:
@@ -85,6 +110,76 @@ class DenseHybridRetriever:
         dense_results = self.dense.search(
             query, top_k=self.dense_top_k, namespace=namespace, filters=filters
         )
+        by_id = {result.chunk.chunk_id: result.chunk for result in lexical_results + dense_results}
+        rankings = [
+            [result.chunk.chunk_id for result in lexical_results],
+            [result.chunk.chunk_id for result in dense_results],
+        ]
+        fused = reciprocal_rank_fusion(
+            rankings,
+            k=self.rrf_k,
+            weights=[self.lexical_weight, self.dense_weight],
+        )
+        return [
+            SearchResult(chunk=by_id[chunk_id], score=score)
+            for chunk_id, score in fused[:top_k]
+        ]
+
+    def search_many(
+        self,
+        queries: list[str],
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        lexical_batches = (
+            self.lexical.search_many(
+                queries,
+                top_k=self.lexical_top_k,
+                namespace=namespace,
+                filters=filters,
+            )
+            if hasattr(self.lexical, "search_many")
+            else [
+                self.lexical.search(
+                    query,
+                    top_k=self.lexical_top_k,
+                    namespace=namespace,
+                    filters=filters,
+                )
+                for query in queries
+            ]
+        )
+        dense_batches = (
+            self.dense.search_many(
+                queries,
+                top_k=self.dense_top_k,
+                namespace=namespace,
+                filters=filters,
+            )
+            if hasattr(self.dense, "search_many")
+            else [
+                self.dense.search(
+                    query,
+                    top_k=self.dense_top_k,
+                    namespace=namespace,
+                    filters=filters,
+                )
+                for query in queries
+            ]
+        )
+        return [
+            self._fuse_results(lexical_results, dense_results, top_k=top_k)
+            for lexical_results, dense_results in zip(lexical_batches, dense_batches)
+        ]
+
+    def _fuse_results(
+        self,
+        lexical_results: list[SearchResult],
+        dense_results: list[SearchResult],
+        *,
+        top_k: int,
+    ) -> list[SearchResult]:
         by_id = {result.chunk.chunk_id: result.chunk for result in lexical_results + dense_results}
         rankings = [
             [result.chunk.chunk_id for result in lexical_results],

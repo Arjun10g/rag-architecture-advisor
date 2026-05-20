@@ -151,8 +151,43 @@ class LanceDBVectorIndex:
         if self.table is None or top_k < 1:
             return []
 
-        filters = filters or {}
         query_vector = self.embedder.encode([query], is_query=True, dimension=self.dimension)[0]
+        return self._search_with_vector(
+            query_vector,
+            top_k=top_k,
+            namespace=namespace,
+            filters=filters,
+        )
+
+    def search_many(
+        self,
+        queries: list[str],
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        if self.table is None or top_k < 1:
+            return [[] for _ in queries]
+        query_vectors = self.embedder.encode(queries, is_query=True, dimension=self.dimension)
+        return [
+            self._search_with_vector(
+                query_vector,
+                top_k=top_k,
+                namespace=namespace,
+                filters=filters,
+            )
+            for query_vector in query_vectors
+        ]
+
+    def _search_with_vector(
+        self,
+        query_vector: list[float],
+        *,
+        top_k: int,
+        namespace: str | None,
+        filters: dict[str, str] | None,
+    ) -> list[SearchResult]:
+        filters = filters or {}
         query_builder = self.table.search(query_vector)
         indexed_filters = _indexed_filters(namespace, filters)
         where_clause = _where_clause(indexed_filters)
@@ -286,17 +321,60 @@ class QdrantVectorIndex:
         if self.client is None or top_k < 1:
             return []
 
+        return self.search_many(
+            [query],
+            top_k=top_k,
+            namespace=namespace,
+            filters=filters,
+        )[0]
+
+    def search_many(
+        self,
+        queries: list[str],
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        if self.client is None or top_k < 1:
+            return [[] for _ in queries]
+
         filters = filters or {}
-        query_vector = self.embedder.encode([query], is_query=True, dimension=self.dimension)[0]
-        response = self.client.query_points(
+        query_vectors = self.embedder.encode(queries, is_query=True, dimension=self.dimension)
+        models = _qdrant_models()
+        query_filter = _qdrant_filter(namespace, filters)
+        requests = [
+            models.QueryRequest(
+                query=query_vector,
+                filter=query_filter,
+                limit=_candidate_limit(top_k, filters),
+                with_payload=["chunk_id"],
+                with_vector=False,
+            )
+            for query_vector in query_vectors
+        ]
+        responses = self.client.query_batch_points(
             collection_name=self.collection_name,
-            query=query_vector,
-            query_filter=_qdrant_filter(namespace, filters),
-            limit=_candidate_limit(top_k, filters),
-            with_payload=["chunk_id"],
-            with_vectors=False,
+            requests=requests,
             timeout=self.timeout_seconds,
         )
+        return [
+            self._results_from_qdrant_response(
+                response,
+                top_k=top_k,
+                namespace=namespace,
+                filters=filters,
+            )
+            for response in responses
+        ]
+
+    def _results_from_qdrant_response(
+        self,
+        response: Any,
+        *,
+        top_k: int,
+        namespace: str | None,
+        filters: dict[str, str],
+    ) -> list[SearchResult]:
         results: list[SearchResult] = []
         for point in response.points:
             payload = point.payload or {}
