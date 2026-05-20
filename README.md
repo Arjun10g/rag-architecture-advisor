@@ -166,6 +166,11 @@ Production settings to verify:
 - For dense/hybrid production retrieval, build and mount the LanceDB index with
   both 1024 and 512 dimensional tables, then set `RETRIEVAL_MODE=hybrid`,
   `VECTOR_STORE_BACKEND=lancedb`, and `EMBEDDING_DIM=1024` or `512`.
+  On Hugging Face Spaces, mount the vector-index Dataset at `/data/vector-index`
+  and set `VECTOR_INDEX_DIR=/data/vector-index/lancedb`. If using a writable
+  mounted volume instead, ship the built index under `corpus/index/lancedb` and
+  set `VECTOR_INDEX_BOOTSTRAP_DIR=corpus/index/lancedb` so first boot copies the
+  artifact into that volume.
 - Keep `LATENCY_SLO_P50_MS=10000` and `LATENCY_SLO_P99_MS=15000` as the standard
   hosted SLO unless product requirements say otherwise. Deep-thinking/full-text
   mode uses `DEEP_LATENCY_SLO_P50_MS=25000` and

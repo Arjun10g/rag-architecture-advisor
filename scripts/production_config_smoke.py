@@ -14,6 +14,27 @@ def main() -> None:
     manifest_dir = Path(tempfile.mkdtemp(prefix="rag-vector-manifest-"))
     audit_dir = root / ".readiness-audit"
     audit_path = audit_dir / "advisor-audit.jsonl"
+    try:
+        import lancedb
+    except ImportError:
+        lancedb = None
+
+    if lancedb is None:
+        print("production_config_smoke=skipped missing_lancedb")
+        return
+
+    db = lancedb.connect(manifest_dir.as_posix())
+    db.create_table(
+        "chunks_dim_1024",
+        data=[{"chunk_id": "smoke-1024", "vector": [0.0] * 1024}],
+        mode="overwrite",
+    )
+    db.create_table(
+        "chunks_dim_512",
+        data=[{"chunk_id": "smoke-512", "vector": [0.0] * 512}],
+        mode="overwrite",
+    )
+
     manifest = manifest_dir / "vector_manifest.json"
     manifest.write_text(
         json.dumps(
@@ -21,8 +42,8 @@ def main() -> None:
                 "backend": "lancedb",
                 "dimensions": [1024, 512],
                 "indexes": [
-                    {"dimension": 1024, "table": "chunks_dim_1024", "chunks": 10},
-                    {"dimension": 512, "table": "chunks_dim_512", "chunks": 10},
+                    {"dimension": 1024, "table": "chunks_dim_1024", "chunks": 1},
+                    {"dimension": 512, "table": "chunks_dim_512", "chunks": 1},
                 ],
             },
             indent=2,
@@ -66,6 +87,10 @@ def main() -> None:
             capture_output=True,
             text=True,
         )
+    except subprocess.CalledProcessError as exc:
+        print(exc.stdout)
+        print(exc.stderr, file=sys.stderr)
+        raise
     finally:
         shutil.rmtree(manifest_dir, ignore_errors=True)
         shutil.rmtree(audit_dir, ignore_errors=True)

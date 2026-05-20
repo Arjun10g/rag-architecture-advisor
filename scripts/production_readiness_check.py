@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover - optional local convenience.
 
 from app import _reset_rate_limiter_for_tests, advise_api
 from llm.provider import DEFAULT_HF_INFERENCE_MODEL
+from retrieval.service import get_retriever
 from scripts.api_output_probe import (
     DEFAULT_BRIEF,
     _validate_deep_research_payload,
@@ -111,17 +112,57 @@ def _vector_manifest_ok(path: Path) -> tuple[bool, str]:
     required = {1024, 512}
     if not required.issubset(dimensions | indexed_dimensions):
         return False, "manifest must include 1024 and 512 dimensional indexes"
+
+    try:
+        import lancedb
+    except ImportError:
+        return False, "lancedb is not installed, so vector tables cannot be verified"
+
+    try:
+        db = lancedb.connect(path.parent.as_posix())
+        table_names = _lancedb_table_names(db)
+    except Exception as exc:
+        return False, f"could not open LanceDB index at {path.parent}: {exc}"
+
+    verified = []
     for item in indexes:
-        if int(item.get("dimension") or 0) in required and int(item.get("chunks") or 0) <= 0:
+        dimension = int(item.get("dimension") or 0)
+        if dimension not in required:
+            continue
+        expected_chunks = int(item.get("chunks") or 0)
+        if expected_chunks <= 0:
             return False, "1024 and 512 indexes must contain chunks"
-    return True, f"dimensions={sorted(dimensions | indexed_dimensions)}"
+        table_name = str(item.get("table") or "")
+        if table_name not in table_names:
+            return False, f"missing LanceDB table {table_name}"
+        try:
+            actual_chunks = int(db.open_table(table_name).count_rows())
+        except Exception as exc:
+            return False, f"could not read LanceDB table {table_name}: {exc}"
+        if actual_chunks != expected_chunks:
+            return False, (
+                f"LanceDB table {table_name} row count {actual_chunks} "
+                f"does not match manifest {expected_chunks}"
+            )
+        verified.append(f"{dimension}:{actual_chunks}")
+    return True, f"verified LanceDB tables {', '.join(verified)}"
+
+
+def _lancedb_table_names(db: Any) -> set[str]:
+    if hasattr(db, "list_tables"):
+        response = db.list_tables()
+        return set(getattr(response, "tables", response))
+    return set(db.table_names())
 
 
 def _validate_direct_public_api() -> tuple[bool, str]:
     previous = os.environ.get("LLM_PROVIDER")
     previous_rate_limit = os.environ.get("RATE_LIMIT_ENABLED")
+    previous_retrieval_mode = os.environ.get("RETRIEVAL_MODE")
     os.environ["LLM_PROVIDER"] = "disabled"
     os.environ["RATE_LIMIT_ENABLED"] = "false"
+    os.environ["RETRIEVAL_MODE"] = "lexical"
+    get_retriever.cache_clear()
     _reset_rate_limiter_for_tests()
     try:
         payload = advise_api(DEFAULT_BRIEF)
@@ -138,6 +179,11 @@ def _validate_direct_public_api() -> tuple[bool, str]:
             os.environ.pop("RATE_LIMIT_ENABLED", None)
         else:
             os.environ["RATE_LIMIT_ENABLED"] = previous_rate_limit
+        if previous_retrieval_mode is None:
+            os.environ.pop("RETRIEVAL_MODE", None)
+        else:
+            os.environ["RETRIEVAL_MODE"] = previous_retrieval_mode
+        get_retriever.cache_clear()
         _reset_rate_limiter_for_tests()
     return (
         True,

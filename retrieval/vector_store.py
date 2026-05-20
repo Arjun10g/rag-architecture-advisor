@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Any
 
 from retrieval.chunking import Chunk
@@ -89,6 +90,7 @@ class LanceDBVectorIndex:
 
         lancedb = _import_lancedb()
         index_dir = Path(store_config.index_dir)
+        _bootstrap_index_dir(index_dir)
         index_dir.mkdir(parents=True, exist_ok=True)
         db = lancedb.connect(index_dir.as_posix())
         table_name = table_name_for_dimension(store_config.table_name, dimension)
@@ -172,6 +174,21 @@ def table_name_for_dimension(base_name: str, dimension: int) -> str:
     if base_name.endswith(suffix):
         return base_name
     return f"{base_name}{suffix}"
+
+
+def _bootstrap_index_dir(index_dir: Path) -> None:
+    bootstrap_dir = os.getenv("VECTOR_INDEX_BOOTSTRAP_DIR", "").strip()
+    if not bootstrap_dir:
+        return
+    source = Path(bootstrap_dir)
+    if source.resolve() == index_dir.resolve():
+        return
+    if (index_dir / "vector_manifest.json").exists():
+        return
+    if not (source / "vector_manifest.json").exists():
+        return
+    index_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, index_dir, dirs_exist_ok=True)
 
 
 def _table_names(db: Any) -> set[str]:
