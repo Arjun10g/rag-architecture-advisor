@@ -116,7 +116,19 @@ DOMAIN_KEYWORDS = {
 
 STATED_ATTRIBUTE_PATTERNS = {
     "A3": [
-        ("multi-hop", ("multi-hop", "chain across", "cross-document reasoning")),
+        (
+            "multi-hop",
+            (
+                "multi-hop",
+                "chain across",
+                "cross-document reasoning",
+                "maximal accuracy",
+                "maximum accuracy",
+                "highest accuracy",
+                "best possible answer",
+                "quality over speed",
+            ),
+        ),
         ("lookup", ("single fact", "simple lookup", "faq lookup")),
     ],
     "A4": [
@@ -141,8 +153,23 @@ STATED_ATTRIBUTE_PATTERNS = {
         ("static", ("static archive", "rarely changes")),
     ],
     "A8": [
-        ("strict", ("point-of-care", "in-ide", "interactive latency", "sub-second")),
-        ("relaxed", ("batch", "research workflow", "offline review")),
+        ("strict", ("point-of-care", "in-ide", "interactive latency", "sub-second", "low latency", "fast response", "real-time")),
+        (
+            "relaxed",
+            (
+                "batch",
+                "research workflow",
+                "offline review",
+                "maximal accuracy",
+                "maximum accuracy",
+                "highest accuracy",
+                "accuracy over latency",
+                "quality over speed",
+                "latency can be relaxed",
+                "latency is not important",
+                "can be slow",
+            ),
+        ),
     ],
     "A9": [
         ("multilingual", ("multilingual", "many languages")),

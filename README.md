@@ -95,6 +95,7 @@ python3 scripts/vector_index_manifest_smoke.py
 python3 scripts/llm_provider_smoke.py
 python3 scripts/rate_limit_smoke.py
 python3 scripts/app_formatting_smoke.py
+python3 scripts/component_strategy_smoke.py
 python3 scripts/audit_log_smoke.py
 python3 scripts/production_readiness_check.py --profile demo
 python3 scripts/production_config_smoke.py

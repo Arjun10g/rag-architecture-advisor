@@ -872,15 +872,89 @@ def _decision_text(
     return str(value or fallback)
 
 
+def _decision_for_area(state: AdvisorState, area: str) -> dict[str, Any]:
+    return _decision_by_area(state).get(area, {})
+
+
+def _decision_evidence_lines(decision: dict[str, Any], *, limit: int = 2) -> list[str]:
+    lines: list[str] = []
+    for chunk in (decision.get("evidence_chunks") or [])[:limit]:
+        label = chunk.get("evidence_label") or "E?"
+        snippet = str(chunk.get("reasoning_chunk") or chunk.get("snippet") or "").strip()
+        if snippet:
+            lines.append(f"- [{label}] {snippet}")
+    if lines:
+        return lines
+    refs = decision.get("evidence_refs") or []
+    return [f"- Evidence support: {_evidence_refs_text(refs[:limit])}"] if refs else []
+
+
+def _plan_profile(state: AdvisorState) -> dict[str, Any]:
+    brief = state.user_brief.lower()
+    latency_value = _requirement_value(state, "A8") or ""
+    complexity_value = _requirement_value(state, "A3") or ""
+    accuracy_terms = (
+        "maximal accuracy",
+        "maximum accuracy",
+        "highest accuracy",
+        "best possible answer",
+        "accuracy over latency",
+        "quality over speed",
+        "most accurate",
+    )
+    latency_terms = (
+        "sub-second",
+        "low latency",
+        "fast response",
+        "real-time",
+        "interactive latency",
+    )
+    if any(term in brief for term in accuracy_terms) or latency_value == "relaxed":
+        return {
+            "key": "accuracy_first",
+            "label": "Accuracy-first",
+            "summary": "Optimize for evidence coverage, ranking quality, citation faithfulness, and answer verification before optimizing speed.",
+            "embedding": "Default to 1024d Matryoshka embeddings; keep 512d only as a measured fallback.",
+            "retrieval": "Use larger hybrid candidate fanout, source diversity, and exact-term lexical support before reranking.",
+            "reranking": "Rerank the full bounded fanout and keep a ColBERT or late-interaction experiment in the ablation lane.",
+            "generation": "Use the strongest available generator profile and deep-thinking/full-reference mode for high-stakes briefs.",
+            "evaluation": "Gate on Recall@k, MRR, nDCG, citation coverage, faithfulness, missing-required-decision rate, and p50/p95/p99 latency.",
+        }
+    if any(term in brief for term in latency_terms) or (latency_value == "strict" and complexity_value != "multi-hop"):
+        return {
+            "key": "latency_first",
+            "label": "Latency-first",
+            "summary": "Keep the answer path fast while making quality loss explicit and measurable.",
+            "embedding": "Prefer the 512d speed profile when ablation shows recall remains acceptable.",
+            "retrieval": "Use capped hybrid fanout or lexical+dense fallback rather than unbounded adaptive retrieval.",
+            "reranking": "Keep reranking bounded or profile-gated so p99 latency remains visible.",
+            "generation": "Use deterministic grounded fallback or shorter hosted generation when SLO pressure is high.",
+            "evaluation": "Gate quality and p50/p95/p99 together so speed improvements do not silently reduce recall.",
+        }
+    return {
+        "key": "balanced",
+        "label": "Balanced quality",
+        "summary": "Balance semantic recall, exact terminology, reranking precision, and public latency.",
+        "embedding": "Keep 1024d for quality and 512d for speed until ablations choose the default.",
+        "retrieval": "Use hybrid lexical+dense retrieval as the standard candidate generator.",
+        "reranking": "Enable reranking over a bounded candidate fanout.",
+        "generation": "Use hosted Llama generation with deterministic fallback.",
+        "evaluation": "Gate retrieval, routing, answer faithfulness, citations, and latency percentiles.",
+    }
+
+
 def _format_design_plan_section(
     *,
     title: str,
     recommendation: str,
     why: list[str],
     validation: str,
+    evidence: list[str] | None = None,
 ) -> list[str]:
     lines = [f"### {title}", f"**Recommendation:** {recommendation}", "", "**Why:**"]
     lines.extend(f"- {item}" for item in why if item)
+    if evidence:
+        lines.extend(["", "**Evidence from selected chunks:**", *evidence])
     lines.extend(["", f"**Validation:** {validation}", ""])
     return lines
 
@@ -1096,6 +1170,7 @@ def _format_implementation_plan(state: AdvisorState) -> str:
     output = state.draft_output or {}
     topology = output.get("topology") or {}
     decisions = _decision_by_area(state)
+    profile = _plan_profile(state)
     pending = [ATTRIBUTE_LABELS.get(attr, attr) for attr in state.pending_elicitation]
     topology_name = topology.get("name", "Pending topology")
     retrieval_choice = _decision_text(
@@ -1113,10 +1188,15 @@ def _format_implementation_plan(state: AdvisorState) -> str:
         "reranking",
         "Bounded reranking before context packing",
     )
+    retrieval_evidence = _decision_evidence_lines(decisions.get("retrieval_strategy", {}), limit=1)
+    rerank_evidence = _decision_evidence_lines(decisions.get("reranking", {}), limit=1)
+    embedding_evidence = _decision_evidence_lines(decisions.get("embedding_dimension", {}), limit=1)
+    evaluation_evidence = _decision_evidence_lines(decisions.get("evaluation", {}), limit=1)
 
     lines = [
         "## Coherent Build Plan",
         f"**Target topology:** {topology_name}",
+        f"**Plan profile:** {profile['label']}. {profile['summary']}",
         "",
         "### 1. Confirm The Brief",
         "Lock the domain, source types, sensitivity, freshness cadence, citation needs, and latency target before changing infrastructure.",
@@ -1127,23 +1207,27 @@ def _format_implementation_plan(state: AdvisorState) -> str:
         "**Exit criteria:** chunking smokes cover fenced code, tables, lists, front matter, and section breadcrumbs.",
         "",
         "### 3. Build Retrieval Profiles",
-        f"Use {retrieval_choice}. Keep lexical-only, dense-only, hybrid, and hybrid-plus-rerank profiles runnable from the same gold set.",
+        f"Use {retrieval_choice}. {profile['retrieval']}",
+        *retrieval_evidence,
         "**Exit criteria:** retrieval ablations report Recall@k, MRR, nDCG, and p50/p95/p99 retrieval latency.",
         "",
         "### 4. Store And Promote Indexes",
-        f"Use {vector_choice}. Keep 1024d and 512d collections separate and promote through aliases instead of overwriting live data.",
+        f"Use {vector_choice}. {profile['embedding']}",
+        *embedding_evidence,
         "**Exit criteria:** both dimension collections smoke successfully and alias promotion is reversible.",
         "",
         "### 5. Rerank And Pack Context",
-        f"{rerank_choice}. Pack concise evidence summaries with labels, source caps, and diversity checks before generation.",
+        f"{rerank_choice}. {profile['reranking']} Pack concise evidence summaries with labels, source caps, and diversity checks before generation.",
+        *rerank_evidence,
         "**Exit criteria:** answer probes show cited decisions, no raw file paths, no raw graph markers, and readable evidence summaries.",
         "",
         "### 6. Generate The Advisor Answer",
-        "Use the stronger hosted Llama model for narrative reasoning, with deterministic fallback when provider latency or availability fails.",
+        profile["generation"],
         "**Exit criteria:** the answer explains why each decision was made, which tradeoff was accepted, and which validation gate proves it.",
         "",
         "### 7. Gate Production",
-        "Run routing, retrieval, reranking, answer, public-surface, security, deep-thinking, and load probes before public release.",
+        f"Run routing, retrieval, reranking, answer, public-surface, security, deep-thinking, and load probes before public release. {profile['evaluation']}",
+        *evaluation_evidence,
         "**Exit criteria:** public `/health` is ok, `/metrics` is token-protected, p50/p99 SLOs pass, and every failed production case becomes a new gold-set item.",
     ]
     return "\n".join(lines)
@@ -1151,6 +1235,7 @@ def _format_implementation_plan(state: AdvisorState) -> str:
 
 def _format_design_plan(state: AdvisorState) -> str:
     decisions = _decision_by_area(state)
+    profile = _plan_profile(state)
     embedding_model = _env_str("EMBEDDING_MODEL", "mixedbread-ai/mxbai-embed-large-v1")
     generation_model = _env_str("HF_INFERENCE_MODEL", "meta-llama/Llama-3.3-70B-Instruct")
     vector_backend = _env_str("VECTOR_STORE_BACKEND", "qdrant").upper()
@@ -1159,6 +1244,7 @@ def _format_design_plan(state: AdvisorState) -> str:
     lines = [
         "## RAG Implementation Design Plan",
         "This is the build-facing version of the recommendation: each choice states what to use, why it follows from the literature-grounded evidence, and how to prove it with evaluation.",
+        f"**Plan profile:** {profile['label']}. {profile['summary']}",
         "",
     ]
     lines.extend(
@@ -1171,8 +1257,9 @@ def _format_design_plan(state: AdvisorState) -> str:
             why=[
                 "A single Matryoshka model lets the system compare quality and speed profiles without changing the representation family.",
                 "A larger model is appropriate because the target briefs emphasize technical terminology, citations, and mixed markdown/code sources.",
-                "Keeping one model family reduces a common eval trap: dimension changes should be tested without simultaneously changing model behavior.",
+                profile["embedding"],
             ],
+            evidence=_decision_evidence_lines(decisions.get("embedding_dimension", {})),
             validation=(
                 "Run retrieval gold cases at each dimension and compare Recall@k, MRR, nDCG, "
                 "citation coverage, p50/p95/p99 latency, and storage cost."
@@ -1190,8 +1277,9 @@ def _format_design_plan(state: AdvisorState) -> str:
             why=[
                 "1024d is the quality profile when fine-grained ranking signal matters.",
                 "512d is the speed and cost profile for public traffic or tighter latency budgets.",
-                "Both dimensions should remain available until ablations show the cheaper profile preserves enough recall.",
+                profile["embedding"],
             ],
+            evidence=_decision_evidence_lines(decisions.get("embedding_dimension", {})),
             validation="Keep separate vector collections or aliases for 1024d and 512d, then gate the default with dimension ablation reports.",
         )
     )
@@ -1244,6 +1332,7 @@ def _format_design_plan(state: AdvisorState) -> str:
                 "Separate dimension collections avoid corrupting an existing index when new embeddings are built.",
                 "Metadata filters are the deployment hook for namespace, domain, sensitivity, and tenant controls.",
             ],
+            evidence=_decision_evidence_lines(decisions.get("vector_database", {})),
             validation="Smoke both dimension collections, query aliases, and verify no existing collection is overwritten during bootstrap.",
         )
     )
@@ -1258,8 +1347,9 @@ def _format_design_plan(state: AdvisorState) -> str:
             why=[
                 "Lexical retrieval protects exact API, control, and implementation terms.",
                 "Dense retrieval improves semantic recall when users phrase the same design idea differently than the corpus.",
-                "Fusion gives the reranker a broader candidate set without trusting either retriever alone.",
+                profile["retrieval"],
             ],
+            evidence=_decision_evidence_lines(decisions.get("retrieval_strategy", {})),
             validation="Ablate lexical-only, dense-only, hybrid, and hybrid-plus-rerank on the same retrieval gold set.",
         )
     )
@@ -1274,8 +1364,9 @@ def _format_design_plan(state: AdvisorState) -> str:
             why=[
                 "Candidate generation should optimize recall; reranking should decide which evidence is precise enough for generation.",
                 "A bounded fanout keeps latency measurable for public traffic.",
-                "Reranking should be optional by profile so strict-latency deployments can fall back cleanly.",
+                profile["reranking"],
             ],
+            evidence=_decision_evidence_lines(decisions.get("reranking", {})),
             validation="Track Recall@k before rerank, nDCG/MRR after rerank, and p50/p95/p99 latency with and without the reranker.",
         )
     )
@@ -1289,8 +1380,9 @@ def _format_design_plan(state: AdvisorState) -> str:
             why=[
                 "The generator should reason over selected literature claims, not raw top-k chunks.",
                 "Evidence labels preserve auditability while keeping the user-facing answer clean.",
-                "Deep thinking should add full-reference approach summaries only when the user asks for slower research synthesis.",
+                profile["generation"],
             ],
+            evidence=_decision_evidence_lines(decisions.get("evaluation", {})),
             validation="Evaluate answer faithfulness, citation support, missing-decision coverage, and whether evidence summaries remain readable.",
         )
     )
