@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 from typing import Any
+import uuid
 
 from retrieval.chunking import Chunk
 from retrieval.embeddings import DenseVectorIndex, EmbeddingConfig, SentenceTransformerEmbedder
@@ -14,6 +15,7 @@ from retrieval.index import SearchResult
 
 DEFAULT_VECTOR_INDEX_DIR = "corpus/index/lancedb"
 DEFAULT_VECTOR_TABLE_NAME = "chunks"
+QDRANT_POINT_NAMESPACE = uuid.UUID("7a6f8a86-6df5-4d0f-b5e5-6b4198ea4b7d")
 INDEXED_FILTER_COLUMNS = {
     "chunk_id",
     "document_id",
@@ -26,6 +28,9 @@ INDEXED_FILTER_COLUMNS = {
     "volatility",
     "contested",
     "element_type",
+    "embedding_model",
+    "embedding_dimension",
+    "embedding_native_dimension",
 }
 
 
@@ -38,6 +43,12 @@ class VectorStoreConfig:
     backend: str = "memory"
     index_dir: str = DEFAULT_VECTOR_INDEX_DIR
     table_name: str = DEFAULT_VECTOR_TABLE_NAME
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    qdrant_local_path: str = ""
+    qdrant_prefer_grpc: bool = False
+    qdrant_timeout_seconds: int = 30
+    qdrant_upload_batch_size: int = 128
 
     @classmethod
     def from_env(cls) -> "VectorStoreConfig":
@@ -45,6 +56,12 @@ class VectorStoreConfig:
             backend=os.getenv("VECTOR_STORE_BACKEND", "memory"),
             index_dir=os.getenv("VECTOR_INDEX_DIR", DEFAULT_VECTOR_INDEX_DIR),
             table_name=os.getenv("VECTOR_TABLE_NAME", DEFAULT_VECTOR_TABLE_NAME),
+            qdrant_url=os.getenv("QDRANT_URL", ""),
+            qdrant_api_key=os.getenv("QDRANT_API_KEY", ""),
+            qdrant_local_path=os.getenv("QDRANT_LOCAL_PATH", ""),
+            qdrant_prefer_grpc=_env_bool("QDRANT_PREFER_GRPC", False),
+            qdrant_timeout_seconds=_env_int("QDRANT_TIMEOUT_SECONDS", 30),
+            qdrant_upload_batch_size=_env_int("QDRANT_UPLOAD_BATCH_SIZE", 128),
         )
 
     @property
@@ -156,6 +173,144 @@ class LanceDBVectorIndex:
         return results
 
 
+class QdrantVectorIndex:
+    """Qdrant-backed vector index using the same search API as DenseVectorIndex."""
+
+    def __init__(
+        self,
+        chunks: list[Chunk],
+        client: Any | None,
+        embedder: SentenceTransformerEmbedder,
+        dimension: int,
+        collection_name: str = "",
+        timeout_seconds: int = 30,
+    ):
+        self.chunks = chunks
+        self.client = client
+        self.embedder = embedder
+        self.dimension = dimension
+        self.collection_name = collection_name
+        self.table_name = collection_name
+        self.timeout_seconds = timeout_seconds
+        self._chunks_by_id = {chunk.chunk_id: chunk for chunk in chunks}
+
+    @classmethod
+    def from_chunks(
+        cls,
+        chunks: list[Chunk],
+        store_config: VectorStoreConfig | None = None,
+        embedding_config: EmbeddingConfig | None = None,
+        *,
+        dimension: int | None = None,
+        rebuild: bool = False,
+        client: Any | None = None,
+    ) -> "QdrantVectorIndex":
+        store_config = store_config or VectorStoreConfig.from_env()
+        embedding_config = embedding_config or EmbeddingConfig.from_env()
+        dimension = dimension or embedding_config.native_dimension
+        embedder = SentenceTransformerEmbedder(embedding_config)
+        collection_name = table_name_for_dimension(store_config.table_name, dimension)
+
+        if not chunks:
+            return cls(
+                chunks=[],
+                client=client,
+                embedder=embedder,
+                dimension=dimension,
+                collection_name=collection_name,
+                timeout_seconds=store_config.qdrant_timeout_seconds,
+            )
+
+        qdrant_client = client or _build_qdrant_client(store_config)
+        collection_exists = qdrant_client.collection_exists(collection_name)
+        if rebuild and collection_exists:
+            qdrant_client.delete_collection(
+                collection_name=collection_name,
+                timeout=store_config.qdrant_timeout_seconds,
+            )
+            collection_exists = False
+
+        if collection_exists:
+            if not _qdrant_collection_matches(
+                qdrant_client,
+                collection_name,
+                chunks,
+                embedding_config,
+                dimension,
+                store_config.qdrant_timeout_seconds,
+            ):
+                raise VectorStoreUnavailable(
+                    f"Qdrant collection {collection_name!r} already exists but does not "
+                    "match this corpus/model/dimension; refusing to overwrite without rebuild."
+                )
+        else:
+            _create_qdrant_collection(
+                qdrant_client,
+                collection_name,
+                dimension,
+                timeout_seconds=store_config.qdrant_timeout_seconds,
+            )
+            dense = DenseVectorIndex.from_chunks(
+                chunks,
+                config=embedding_config,
+                dimension=dimension,
+                rebuild=rebuild,
+            )
+            _upload_qdrant_points(
+                qdrant_client,
+                collection_name,
+                chunks,
+                dense.vectors,
+                embedding_config,
+                dimension,
+                batch_size=store_config.qdrant_upload_batch_size,
+                timeout_seconds=store_config.qdrant_timeout_seconds,
+            )
+
+        return cls(
+            chunks=chunks,
+            client=qdrant_client,
+            embedder=embedder,
+            dimension=dimension,
+            collection_name=collection_name,
+            timeout_seconds=store_config.qdrant_timeout_seconds,
+        )
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[SearchResult]:
+        if self.client is None or top_k < 1:
+            return []
+
+        filters = filters or {}
+        query_vector = self.embedder.encode([query], is_query=True, dimension=self.dimension)[0]
+        response = self.client.query_points(
+            collection_name=self.collection_name,
+            query=query_vector,
+            query_filter=_qdrant_filter(namespace, filters),
+            limit=_candidate_limit(top_k, filters),
+            with_payload=["chunk_id"],
+            with_vectors=False,
+            timeout=self.timeout_seconds,
+        )
+        results: list[SearchResult] = []
+        for point in response.points:
+            payload = point.payload or {}
+            chunk = self._chunks_by_id.get(str(payload.get("chunk_id", "")))
+            if chunk is None:
+                continue
+            if not _metadata_matches(chunk, namespace, filters):
+                continue
+            results.append(SearchResult(chunk=chunk, score=float(point.score)))
+            if len(results) >= top_k:
+                break
+        return results
+
+
 def _import_lancedb() -> Any:
     try:
         import lancedb
@@ -165,6 +320,42 @@ def _import_lancedb() -> Any:
             "or set VECTOR_STORE_BACKEND=memory."
         ) from exc
     return lancedb
+
+
+def _import_qdrant() -> tuple[Any, Any]:
+    try:
+        from qdrant_client import QdrantClient, models
+    except ImportError as exc:  # pragma: no cover - optional deployment dependency.
+        raise VectorStoreUnavailable(
+            "qdrant-client is not installed; run `python3 -m pip install -r requirements.txt` "
+            "or set VECTOR_STORE_BACKEND=memory."
+        ) from exc
+    return QdrantClient, models
+
+
+def _qdrant_models() -> Any:
+    _, models = _import_qdrant()
+    return models
+
+
+def _build_qdrant_client(store_config: VectorStoreConfig) -> Any:
+    QdrantClient, _ = _import_qdrant()
+    if store_config.qdrant_url:
+        return QdrantClient(
+            url=store_config.qdrant_url,
+            api_key=store_config.qdrant_api_key or None,
+            prefer_grpc=store_config.qdrant_prefer_grpc,
+            timeout=store_config.qdrant_timeout_seconds,
+        )
+    if store_config.qdrant_local_path:
+        return QdrantClient(
+            path=store_config.qdrant_local_path,
+            timeout=store_config.qdrant_timeout_seconds,
+        )
+    raise VectorStoreUnavailable(
+        "VECTOR_STORE_BACKEND=qdrant requires QDRANT_URL plus QDRANT_API_KEY for "
+        "Qdrant Cloud, or QDRANT_LOCAL_PATH for a local Qdrant store."
+    )
 
 
 def table_name_for_dimension(base_name: str, dimension: int) -> str:
@@ -196,6 +387,136 @@ def _table_names(db: Any) -> set[str]:
         response = db.list_tables()
         return set(getattr(response, "tables", response))
     return set(db.table_names())
+
+
+def _qdrant_collection_matches(
+    client: Any,
+    collection_name: str,
+    chunks: list[Chunk],
+    embedding_config: EmbeddingConfig,
+    dimension: int,
+    timeout_seconds: int,
+) -> bool:
+    try:
+        if not client.collection_exists(collection_name):
+            return False
+        total = client.count(
+            collection_name=collection_name,
+            exact=True,
+            timeout=timeout_seconds,
+        ).count
+        if int(total) != len(chunks):
+            return False
+        matching = client.count(
+            collection_name=collection_name,
+            count_filter=_qdrant_filter(
+                None,
+                {
+                    "embedding_model": embedding_config.model_name,
+                    "embedding_dimension": dimension,
+                    "embedding_native_dimension": embedding_config.native_dimension,
+                },
+            ),
+            exact=True,
+            timeout=timeout_seconds,
+        ).count
+    except Exception:
+        return False
+    return int(matching) == len(chunks)
+
+
+def _create_qdrant_collection(
+    client: Any,
+    collection_name: str,
+    dimension: int,
+    *,
+    timeout_seconds: int,
+) -> None:
+    models = _qdrant_models()
+    client.create_collection(
+        collection_name=collection_name,
+        vectors_config=models.VectorParams(size=dimension, distance=models.Distance.COSINE),
+        timeout=timeout_seconds,
+    )
+    _create_qdrant_payload_indexes(client, collection_name, timeout_seconds)
+
+
+def _create_qdrant_payload_indexes(
+    client: Any,
+    collection_name: str,
+    timeout_seconds: int,
+) -> None:
+    models = _qdrant_models()
+    integer_fields = {
+        "chunk_index",
+        "start_line",
+        "end_line",
+        "embedding_dimension",
+        "embedding_native_dimension",
+    }
+    keyword_fields = sorted(INDEXED_FILTER_COLUMNS - integer_fields)
+    for field_name in keyword_fields:
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+                wait=True,
+                timeout=timeout_seconds,
+            )
+        except Exception:
+            continue
+    for field_name in sorted(integer_fields):
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.INTEGER,
+                wait=True,
+                timeout=timeout_seconds,
+            )
+        except Exception:
+            continue
+
+
+def _upload_qdrant_points(
+    client: Any,
+    collection_name: str,
+    chunks: list[Chunk],
+    vectors: list[list[float]],
+    embedding_config: EmbeddingConfig,
+    dimension: int,
+    *,
+    batch_size: int,
+    timeout_seconds: int,
+) -> None:
+    models = _qdrant_models()
+    points = []
+    for chunk, vector in zip(chunks, vectors):
+        row = _row_for_chunk(chunk, vector, embedding_config, dimension)
+        row.pop("vector", None)
+        points.append(
+            models.PointStruct(
+                id=_qdrant_point_id(chunk.chunk_id),
+                vector=[float(value) for value in vector],
+                payload=row,
+            )
+        )
+        if len(points) >= batch_size:
+            client.upsert(
+                collection_name=collection_name,
+                points=points,
+                wait=True,
+                timeout=timeout_seconds,
+            )
+            points = []
+    if points:
+        client.upsert(
+            collection_name=collection_name,
+            points=points,
+            wait=True,
+            timeout=timeout_seconds,
+        )
 
 
 def _table_matches_chunks(
@@ -267,20 +588,46 @@ def _metadata_str(metadata: dict[str, Any], key: str) -> str:
     return str(value)
 
 
-def _indexed_filters(namespace: str | None, filters: dict[str, str]) -> dict[str, str]:
-    indexed: dict[str, str] = {}
+def _qdrant_point_id(chunk_id: str) -> str:
+    return str(uuid.uuid5(QDRANT_POINT_NAMESPACE, chunk_id))
+
+
+def _indexed_filters(namespace: str | None, filters: dict[str, Any]) -> dict[str, Any]:
+    indexed: dict[str, Any] = {}
     if namespace:
         indexed["namespace"] = namespace
     for key, value in filters.items():
         if key in INDEXED_FILTER_COLUMNS:
-            indexed[key] = str(value)
+            indexed[key] = value
     return indexed
+
+
+def _qdrant_filter(namespace: str | None, filters: dict[str, Any]) -> Any | None:
+    indexed = _indexed_filters(namespace, filters)
+    if not indexed:
+        return None
+    models = _qdrant_models()
+    return models.Filter(
+        must=[
+            models.FieldCondition(
+                key=key,
+                match=models.MatchValue(value=_qdrant_filter_value(value)),
+            )
+            for key, value in sorted(indexed.items())
+        ]
+    )
+
+
+def _qdrant_filter_value(value: Any) -> Any:
+    if isinstance(value, (bool, int, float)):
+        return value
+    return str(value)
 
 
 def _where_clause(filters: dict[str, str]) -> str:
     clauses = []
     for key, value in sorted(filters.items()):
-        safe_value = value.replace("'", "''")
+        safe_value = str(value).replace("'", "''")
         clauses.append(f"{key} = '{safe_value}'")
     return " AND ".join(clauses)
 
@@ -307,3 +654,17 @@ def _score_from_lance_row(row: dict[str, Any]) -> float:
         return -float(distance)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _env_int(key: str, default: int) -> int:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return int(value)
+
+
+def _env_bool(key: str, default: bool = False) -> bool:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return value.lower().strip() in {"1", "true", "yes", "on"}

@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - optional local convenience.
 from app import _reset_rate_limiter_for_tests, advise_api
 from llm.provider import DEFAULT_HF_INFERENCE_MODEL
 from retrieval.service import get_retriever
+from retrieval.vector_store import VectorStoreConfig
 from scripts.api_output_probe import (
     DEFAULT_BRIEF,
     _validate_deep_research_payload,
@@ -33,6 +34,7 @@ REQUIRED_FILES = (
     "agents/research_agents.py",
     "corpus/manifest.yaml",
     "scripts/api_output_probe.py",
+    "scripts/qdrant_cloud_bootstrap.py",
     "scripts/deep_research_full_text_smoke.py",
     "scripts/deep_research_smoke.py",
     "scripts/hf_generation_probe.py",
@@ -112,6 +114,9 @@ def _vector_manifest_ok(path: Path) -> tuple[bool, str]:
     required = {1024, 512}
     if not required.issubset(dimensions | indexed_dimensions):
         return False, "manifest must include 1024 and 512 dimensional indexes"
+    backend = str(payload.get("backend") or os.getenv("VECTOR_STORE_BACKEND", "")).strip().lower()
+    if backend == "qdrant":
+        return _qdrant_manifest_ok(indexes, required)
 
     try:
         import lancedb
@@ -146,6 +151,60 @@ def _vector_manifest_ok(path: Path) -> tuple[bool, str]:
             )
         verified.append(f"{dimension}:{actual_chunks}")
     return True, f"verified LanceDB tables {', '.join(verified)}"
+
+
+def _qdrant_manifest_ok(indexes: list[dict[str, Any]], required: set[int]) -> tuple[bool, str]:
+    try:
+        from qdrant_client import QdrantClient
+    except ImportError:
+        return False, "qdrant-client is not installed, so Qdrant collections cannot be verified"
+
+    config = VectorStoreConfig.from_env()
+    try:
+        if config.qdrant_url:
+            client = QdrantClient(
+                url=config.qdrant_url,
+                api_key=config.qdrant_api_key or None,
+                prefer_grpc=config.qdrant_prefer_grpc,
+                timeout=config.qdrant_timeout_seconds,
+            )
+        elif config.qdrant_local_path:
+            client = QdrantClient(path=config.qdrant_local_path, timeout=config.qdrant_timeout_seconds)
+        else:
+            return False, "Qdrant verification requires QDRANT_URL or QDRANT_LOCAL_PATH"
+    except Exception as exc:
+        return False, f"could not create Qdrant client: {exc}"
+
+    verified = []
+    for item in indexes:
+        dimension = int(item.get("dimension") or 0)
+        if dimension not in required:
+            continue
+        expected_chunks = int(item.get("chunks") or 0)
+        if expected_chunks <= 0:
+            return False, "1024 and 512 indexes must contain chunks"
+        collection_name = str(item.get("collection") or item.get("table") or "")
+        if not collection_name:
+            return False, f"missing Qdrant collection name for {dimension}"
+        try:
+            if not client.collection_exists(collection_name):
+                return False, f"missing Qdrant collection {collection_name}"
+            actual_chunks = int(
+                client.count(
+                    collection_name=collection_name,
+                    exact=True,
+                    timeout=config.qdrant_timeout_seconds,
+                ).count
+            )
+        except Exception as exc:
+            return False, f"could not read Qdrant collection {collection_name}: {exc}"
+        if actual_chunks != expected_chunks:
+            return False, (
+                f"Qdrant collection {collection_name} row count {actual_chunks} "
+                f"does not match manifest {expected_chunks}"
+            )
+        verified.append(f"{dimension}:{actual_chunks}")
+    return True, f"verified Qdrant collections {', '.join(verified)}"
 
 
 def _lancedb_table_names(db: Any) -> set[str]:
@@ -256,7 +315,7 @@ def main() -> None:
         vector_backend = os.getenv("VECTOR_STORE_BACKEND", "memory").strip().lower()
         _check(
             "vector_store_backend",
-            vector_backend in {"lancedb", "lance"},
+            vector_backend in {"lancedb", "lance", "qdrant"},
             f"VECTOR_STORE_BACKEND={vector_backend}",
             checks,
         )

@@ -9,7 +9,12 @@ from retrieval.chunking import Chunk
 from retrieval.embeddings import DenseVectorIndex, EmbeddingConfig, EmbeddingUnavailable
 from retrieval.index import HybridRetriever, SearchResult, reciprocal_rank_fusion
 from retrieval.rerank import ColbertReranker, RerankerUnavailable
-from retrieval.vector_store import LanceDBVectorIndex, VectorStoreConfig, VectorStoreUnavailable
+from retrieval.vector_store import (
+    LanceDBVectorIndex,
+    QdrantVectorIndex,
+    VectorStoreConfig,
+    VectorStoreUnavailable,
+)
 
 
 try:
@@ -260,6 +265,15 @@ def _build_dense_index(
             dimension=dimension,
             rebuild=rebuild,
         )
+    if backend == "qdrant":
+        return QdrantVectorIndex.from_chunks(
+            chunks,
+            store_config=vector_store_config,
+            embedding_config=embedding_config,
+            dimension=dimension,
+            rebuild=rebuild,
+        )
     raise VectorStoreUnavailable(
-        f"Unknown VECTOR_STORE_BACKEND {vector_store_config.backend!r}; expected memory or lancedb."
+        f"Unknown VECTOR_STORE_BACKEND {vector_store_config.backend!r}; "
+        "expected memory, lancedb, or qdrant."
     )

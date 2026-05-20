@@ -11,15 +11,20 @@ if __package__ in {None, ""}:
 
 from ingestion.build_index import build_index
 from retrieval.embeddings import DEFAULT_EMBEDDING_MODEL, EmbeddingConfig, EmbeddingUnavailable
-from retrieval.vector_store import LanceDBVectorIndex, VectorStoreConfig, VectorStoreUnavailable
+from retrieval.vector_store import (
+    LanceDBVectorIndex,
+    QdrantVectorIndex,
+    VectorStoreConfig,
+    VectorStoreUnavailable,
+)
 
 
 DEFAULT_INDEX_DIMENSIONS = "1024,512"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build persisted LanceDB vector indexes.")
-    parser.add_argument("--backend", default="lancedb", choices=["lancedb", "lance"])
+    parser = argparse.ArgumentParser(description="Build persisted vector-store indexes.")
+    parser.add_argument("--backend", default="lancedb", choices=["lancedb", "lance", "qdrant"])
     parser.add_argument("--index-dir", default="corpus/index/lancedb")
     parser.add_argument("--table", default="chunks")
     parser.add_argument("--model", default=DEFAULT_EMBEDDING_MODEL)
@@ -49,17 +54,25 @@ def main() -> None:
         batch_size=args.batch_size,
         cache_dir=args.cache_dir,
     )
+    env_vector_config = VectorStoreConfig.from_env()
     vector_config = VectorStoreConfig(
         backend=args.backend,
         index_dir=args.index_dir,
         table_name=args.table,
+        qdrant_url=env_vector_config.qdrant_url,
+        qdrant_api_key=env_vector_config.qdrant_api_key,
+        qdrant_local_path=env_vector_config.qdrant_local_path,
+        qdrant_prefer_grpc=env_vector_config.qdrant_prefer_grpc,
+        qdrant_timeout_seconds=env_vector_config.qdrant_timeout_seconds,
+        qdrant_upload_batch_size=env_vector_config.qdrant_upload_batch_size,
     )
 
     store = build_index()
     built_indexes = []
     try:
         for dimension in build_order:
-            index = LanceDBVectorIndex.from_chunks(
+            index_cls = QdrantVectorIndex if args.backend == "qdrant" else LanceDBVectorIndex
+            index = index_cls.from_chunks(
                 store.chunks,
                 store_config=vector_config,
                 embedding_config=embedding_config,

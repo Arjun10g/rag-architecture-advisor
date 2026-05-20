@@ -36,9 +36,11 @@ summaries and links without raw corpus IDs or file paths.
 - At app startup, `ingestion/build_index.py` reads the manifest and chunks the
   markdown into an in-memory `FileChunkStore`; the default lexical retriever does
   not require a persistent database.
-- Deployment-grade dense retrieval now has an optional LanceDB backend. Set
-  `VECTOR_STORE_BACKEND=lancedb` to read/write a persisted vector table under
-  `VECTOR_INDEX_DIR` while keeping the lexical path available as the safe default.
+- Deployment-grade dense retrieval now supports LanceDB and Qdrant. Set
+  `VECTOR_STORE_BACKEND=qdrant` for a managed Qdrant cluster, or
+  `VECTOR_STORE_BACKEND=lancedb` to read/write a persisted local vector table
+  under `VECTOR_INDEX_DIR`, while keeping the lexical path available as the safe
+  default.
 - Optional generated artifacts are ignored: `.cache/` for embedding/vector
   caches, `corpus/index/` for future local indexes, and `eval/results/` for
   ablation outputs.
@@ -194,13 +196,12 @@ The default `RETRIEVAL_MODE=lexical` path is dependency-light and used by CI. Fo
 dense retrieval experiments, copy `.env.example` into `.env`, install
 `requirements.txt`, and switch to `RETRIEVAL_MODE=dense` or `RETRIEVAL_MODE=hybrid`.
 
-Use `VECTOR_STORE_BACKEND=memory` for quick local experiments. Use LanceDB for
-actual deployment or repeatable dense evaluation. The build command stores both
-1024- and 512-dimensional Matryoshka indexes by default as separate tables
-(`chunks_dim_1024` and `chunks_dim_512`), so switching `EMBEDDING_DIM` does not
-force a rebuild. The build also writes
-`corpus/index/lancedb/vector_manifest.json` so deployment can verify which
-tables and dimensions are present:
+Use `VECTOR_STORE_BACKEND=memory` for quick local experiments. Use Qdrant for a
+managed deployment, or LanceDB for local repeatable dense evaluation. Both paths
+store 1024- and 512-dimensional Matryoshka indexes by default as separate
+tables/collections, so switching `EMBEDDING_DIM` does not force a rebuild.
+
+For LanceDB:
 
 ```bash
 python3 scripts/build_vector_index.py --backend lancedb --dimensions 1024,512 --rebuild
@@ -214,6 +215,25 @@ VECTOR_STORE_BACKEND=lancedb
 VECTOR_INDEX_DIR=corpus/index/lancedb
 EMBEDDING_DIM=1024  # or 512 to select chunks_dim_512
 ```
+
+For Qdrant Cloud, provide `QDRANT_CLOUD_KEY` plus `QDRANT_CLOUD_ACCOUNT_ID`
+or `QDRANT_ID`, then bootstrap isolated advisor collections without overwriting
+existing cluster data:
+
+```bash
+python3 scripts/qdrant_cloud_bootstrap.py \
+  --cluster-name bankmind \
+  --table rag_advisor_chunks \
+  --source-table chunks \
+  --write-env \
+  --dimensions 1024,512
+```
+
+This creates or verifies `rag_advisor_chunks_dim_1024` and
+`rag_advisor_chunks_dim_512`, writes `corpus/index/qdrant/vector_manifest.json`,
+and sets `VECTOR_STORE_BACKEND=qdrant`, `QDRANT_URL`, `QDRANT_API_KEY`, and
+`VECTOR_TABLE_NAME=rag_advisor_chunks` in `.env`. Existing non-matching
+collections are refused unless `--rebuild` is explicitly passed.
 
 The dense path uses `mixedbread-ai/mxbai-embed-large-v1`, a 1024-dimensional
 Matryoshka-capable embedding model. Run the dimension ablation after dependencies
