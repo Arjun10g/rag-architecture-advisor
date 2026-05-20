@@ -29,21 +29,27 @@ class EmbeddingUnavailable(RuntimeError):
 @dataclass(frozen=True)
 class EmbeddingConfig:
     model_name: str = DEFAULT_EMBEDDING_MODEL
+    provider: str = "local"
+    hf_provider: str = "auto"
     native_dimension: int = 1024
     dimensions: tuple[int, ...] = DEFAULT_DIMENSIONS
     query_prefix: str = DEFAULT_QUERY_PREFIX
     batch_size: int = 16
     cache_dir: str = ".cache/embeddings"
+    timeout_seconds: float = 30.0
 
     @classmethod
     def from_env(cls) -> "EmbeddingConfig":
         return cls(
             model_name=os.getenv("EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
+            provider=os.getenv("EMBEDDING_PROVIDER", "local"),
+            hf_provider=os.getenv("EMBEDDING_HF_PROVIDER", "auto"),
             native_dimension=_env_int("EMBEDDING_NATIVE_DIM", 1024),
             dimensions=_parse_dimensions(os.getenv("EMBEDDING_DIMS"), DEFAULT_DIMENSIONS),
             query_prefix=_query_prefix(os.getenv("EMBEDDING_QUERY_PREFIX", DEFAULT_QUERY_PREFIX)),
             batch_size=_env_int("EMBEDDING_BATCH_SIZE", 16),
             cache_dir=os.getenv("EMBEDDING_CACHE_DIR", ".cache/embeddings"),
+            timeout_seconds=_env_float("EMBEDDING_TIMEOUT_SECONDS", 30.0),
         )
 
 
@@ -58,17 +64,49 @@ class SentenceTransformerEmbedder:
         _validate_dimension(dimension, self.config.native_dimension)
 
         prepared = [self._prepare_query(text) for text in texts] if is_query else texts
+        if self.config.provider.lower().strip() in {"hf", "huggingface", "huggingface_hub"}:
+            return self._encode_hf(prepared, dimension=dimension)
+
         try:
             with _MODEL_ENCODE_LOCK:
                 raw_vectors = self._load_model().encode(
                     prepared,
                     batch_size=self.config.batch_size,
                     normalize_embeddings=True,
+                    truncate_dim=dimension,
                     show_progress_bar=False,
                 )
         except Exception as exc:  # pragma: no cover - depends on optional ML runtime/model cache.
             raise EmbeddingUnavailable(
                 f"Could not encode with {self.config.model_name}: {exc}"
+            ) from exc
+
+        return [_normalize(_to_float_list(vector)[:dimension]) for vector in raw_vectors]
+
+    def _encode_hf(self, texts: list[str], *, dimension: int) -> list[list[float]]:
+        try:
+            from huggingface_hub import InferenceClient
+        except ImportError as exc:  # pragma: no cover - optional dependency.
+            raise EmbeddingUnavailable(
+                "huggingface_hub is not installed; run `python3 -m pip install -r requirements.txt` "
+                "or set EMBEDDING_PROVIDER=local."
+            ) from exc
+
+        try:
+            client = InferenceClient(
+                model=self.config.model_name,
+                provider=self.config.hf_provider,
+                token=_first_env("HF_TOKEN", "HF_ACCESS_TOKEN"),
+                timeout=self.config.timeout_seconds,
+            )
+            raw_vectors = client.feature_extraction(
+                texts,
+                normalize=True,
+                dimensions=dimension,
+            )
+        except Exception as exc:  # pragma: no cover - network/provider dependent.
+            raise EmbeddingUnavailable(
+                f"Could not encode with HF feature extraction {self.config.model_name}: {exc}"
             ) from exc
 
         return [_normalize(_to_float_list(vector)[:dimension]) for vector in raw_vectors]
@@ -190,6 +228,21 @@ def _env_int(key: str, default: int) -> int:
     if value is None or not value.strip():
         return default
     return int(value)
+
+
+def _env_float(key: str, default: float) -> float:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return float(value)
+
+
+def _first_env(*keys: str) -> str | None:
+    for key in keys:
+        value = os.getenv(key)
+        if value and value.strip():
+            return value
+    return None
 
 
 def _parse_dimensions(raw: str | None, default: tuple[int, ...]) -> tuple[int, ...]:
