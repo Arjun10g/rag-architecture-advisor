@@ -183,7 +183,10 @@ Production settings to verify:
   references without exposing internal source identifiers.
 - Keep `DEEP_RESEARCH_FULL_TEXT=true` in production so deep mode reads and
   summarizes selected full public references. Use `DEEP_RESEARCH_MAX_FULL_TEXT_LINKS`,
-  fetch timeout, and cache settings to bound latency and network risk.
+  fetch timeout, and cache settings to bound latency and network risk. Keep
+  `DEEP_RESEARCH_RETRIEVAL_MODE=lexical` unless you explicitly want the research
+  sidecar to spend dense-query latency; the main advisor retrieval can still run
+  as `RETRIEVAL_MODE=hybrid`.
 
 ## Retrieval Modes
 

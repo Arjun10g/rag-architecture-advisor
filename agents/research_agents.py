@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from functools import lru_cache
 from hashlib import sha256
 from html.parser import HTMLParser
 import operator
@@ -20,7 +21,8 @@ from graph.state import (
     ResearchLink,
     SourceRef,
 )
-from retrieval.index import SearchResult
+from ingestion.build_index import build_index
+from retrieval.index import HybridRetriever, SearchResult
 from retrieval.service import retrieve
 
 try:  # LangGraph is the preferred orchestrator; CI still has a no-surprises fallback.
@@ -217,11 +219,37 @@ def run_research_agents(
     retrieve_fn: ResearchRetrieveFn | None = None,
     full_text_fetcher: FullTextFetchFn | None = None,
 ) -> dict[str, ResearchFinding]:
-    retrieve_fn = retrieve_fn or retrieve
+    retrieve_fn = retrieve_fn or _default_retrieve_fn()
     langgraph_findings = _run_with_langgraph(state, retrieve_fn, full_text_fetcher)
     if langgraph_findings is not None:
         return langgraph_findings
     return _run_with_thread_pool(state, retrieve_fn, full_text_fetcher)
+
+
+def _default_retrieve_fn() -> ResearchRetrieveFn:
+    mode = os.getenv("DEEP_RESEARCH_RETRIEVAL_MODE", "lexical").lower().strip()
+    if mode in {"runtime", "default", "configured"}:
+        return retrieve
+    return _lexical_retrieve
+
+
+def _lexical_retrieve(
+    query: str,
+    namespace: str,
+    top_k: int,
+    filters: dict[str, str] | None,
+) -> list[SearchResult]:
+    return _research_lexical_retriever().search(
+        query,
+        top_k=top_k,
+        namespace=namespace,
+        filters=filters,
+    )
+
+
+@lru_cache(maxsize=1)
+def _research_lexical_retriever() -> HybridRetriever:
+    return HybridRetriever(build_index().chunks)
 
 
 def _run_with_langgraph(
