@@ -110,6 +110,7 @@ class AdvisorState:
     critique: list[str] = field(default_factory=list)
     loop_count: int = 0
     graph_trace: list[str] = field(default_factory=list)
+    timings_ms: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def from_input(cls, value: "AdvisorState | dict[str, Any]") -> "AdvisorState":

@@ -702,6 +702,7 @@ def advise_api(
         "generation": _public_generation_status(raw_trace),
         "runtime": {
             "latency_ms": round((time.perf_counter() - started) * 1000, 2),
+            "graph_timings_ms": raw_trace.get("timings_ms") or {},
         },
     }
 
@@ -790,7 +791,21 @@ def build_demo():
     return demo
 
 
+def _prewarm_runtime() -> None:
+    if not _env_bool("PREWARM_RETRIEVER", False):
+        return
+    try:
+        from retrieval.service import get_retriever
+
+        get_retriever().search("warmup retrieval query", top_k=1, namespace="knowledge")
+    except Exception:
+        # Prewarming is an optimization only; app startup should still proceed
+        # and surface any real retrieval failures on the first request.
+        return
+
+
 demo = build_demo() if gr else None
+_prewarm_runtime()
 
 
 if __name__ == "__main__":
