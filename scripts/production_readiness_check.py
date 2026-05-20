@@ -38,6 +38,10 @@ REQUIRED_FILES = (
     "scripts/deep_research_full_text_smoke.py",
     "scripts/deep_research_smoke.py",
     "scripts/hf_generation_probe.py",
+    "scripts/load_probe.py",
+    "scripts/observability_smoke.py",
+    "scripts/public_surface_probe.py",
+    "scripts/qdrant_blue_green_promote.py",
     "eval/gold/v0_2_expanded.json",
     "eval/gold/v0_4_answer_quality.json",
     "eval/gold/v0_5_panel_quality.json",
@@ -65,6 +69,13 @@ def _env_float(key: str) -> float | None:
     if value is None or not value.strip():
         return None
     return float(value)
+
+
+def _env_int(key: str, default: int) -> int:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return int(value)
 
 
 def _latency_slo_ok(prefix: str = "") -> tuple[bool, str]:
@@ -108,6 +119,75 @@ def _audit_failure_mode_ok() -> tuple[bool, str]:
     if mode != "fail":
         return False, "set ADVISOR_AUDIT_FAILURE_MODE=fail for production"
     return True, "fail"
+
+
+def _public_access_ok() -> tuple[bool, str]:
+    mode = os.getenv("PUBLIC_ACCESS_MODE", "private").strip().lower()
+    if mode not in {"private", "authenticated", "gateway", "anonymous"}:
+        return False, "PUBLIC_ACCESS_MODE must be private, authenticated, gateway, or anonymous"
+    username_set = _nonempty_env("GRADIO_AUTH_USERNAME")
+    password_set = _nonempty_env("GRADIO_AUTH_PASSWORD")
+    gateway_set = _env_bool("EXTERNAL_AUTH_GATEWAY")
+    if mode == "anonymous" and not _env_bool("ALLOW_ANONYMOUS_PUBLIC"):
+        return False, "anonymous mode requires ALLOW_ANONYMOUS_PUBLIC=true"
+    if mode == "authenticated" and not (username_set and password_set):
+        return False, "authenticated mode requires GRADIO_AUTH_USERNAME/PASSWORD"
+    if mode == "gateway" and not gateway_set:
+        return False, "gateway mode requires EXTERNAL_AUTH_GATEWAY=true"
+    return True, mode
+
+
+def _raw_trace_ok() -> tuple[bool, str]:
+    if _env_bool("SHOW_RAW_TRACE"):
+        return False, "SHOW_RAW_TRACE must be false in production"
+    return True, "hidden"
+
+
+def _metrics_token_ok() -> tuple[bool, str]:
+    if _secret_present("METRICS_AUTH_TOKEN", "OPERATIONS_TOKEN"):
+        return True, "set"
+    return False, "set METRICS_AUTH_TOKEN or OPERATIONS_TOKEN"
+
+
+def _input_bounds_ok() -> tuple[bool, str]:
+    brief = _env_int("MAX_BRIEF_CHARS", 4000)
+    elicitation = _env_int("MAX_ELICITATION_CHARS", 2000)
+    conflict = _env_int("MAX_CONFLICT_CHARS", 1000)
+    max_tokens = _env_int("LLM_MAX_TOKENS", 1800)
+    deep_links = _env_int("DEEP_RESEARCH_MAX_FULL_TEXT_LINKS", 4)
+    if not (1 <= brief <= 8000):
+        return False, "MAX_BRIEF_CHARS must be between 1 and 8000"
+    if not (1 <= elicitation <= 4000):
+        return False, "MAX_ELICITATION_CHARS must be between 1 and 4000"
+    if not (1 <= conflict <= 2000):
+        return False, "MAX_CONFLICT_CHARS must be between 1 and 2000"
+    if not (1 <= max_tokens <= 2200):
+        return False, "LLM_MAX_TOKENS must be between 1 and 2200"
+    if not (0 <= deep_links <= 8):
+        return False, "DEEP_RESEARCH_MAX_FULL_TEXT_LINKS must be between 0 and 8"
+    return True, f"brief<={brief} elicitation<={elicitation} conflict<={conflict} tokens<={max_tokens} full_text_links<={deep_links}"
+
+
+def _cost_controls_ok() -> tuple[bool, str]:
+    if not _env_bool("RATE_LIMIT_ENABLED") and not _env_bool("EXTERNAL_RATE_LIMITING"):
+        return False, "rate limiting or external rate limiting is required"
+    standard_limit = _env_int("RATE_LIMIT_MAX_REQUESTS", 30)
+    deep_limit = _env_int("RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS", standard_limit)
+    if deep_limit > standard_limit:
+        return False, "deep-thinking request limit cannot exceed the standard limit"
+    if os.getenv("DEEP_THINKING_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"} and deep_limit <= 0:
+        return False, "deep-thinking limit must be positive when deep thinking is enabled"
+    return True, f"standard_limit={standard_limit} deep_limit={deep_limit}"
+
+
+def _serving_capacity_ok() -> tuple[bool, str]:
+    concurrency = _env_int("ADVISOR_CONCURRENCY_LIMIT", 2)
+    queue_size = _env_int("ADVISOR_QUEUE_MAX_SIZE", 32)
+    if not (1 <= concurrency <= 8):
+        return False, "ADVISOR_CONCURRENCY_LIMIT must be between 1 and 8"
+    if not (1 <= queue_size <= 256):
+        return False, "ADVISOR_QUEUE_MAX_SIZE must be between 1 and 256"
+    return True, f"advisor_concurrency={concurrency} queue_max={queue_size}"
 
 
 def _vector_manifest_ok(path: Path) -> tuple[bool, str]:
@@ -377,6 +457,18 @@ def main() -> None:
         _check("audit_log_path", ok, detail, checks)
         ok, detail = _audit_failure_mode_ok()
         _check("audit_failure_mode", ok, detail, checks)
+        ok, detail = _public_access_ok()
+        _check("public_access_mode", ok, detail, checks)
+        ok, detail = _raw_trace_ok()
+        _check("raw_trace_hidden", ok, detail, checks)
+        ok, detail = _metrics_token_ok()
+        _check("metrics_token", ok, detail, checks)
+        ok, detail = _input_bounds_ok()
+        _check("input_and_cost_bounds", ok, detail, checks)
+        ok, detail = _cost_controls_ok()
+        _check("cost_controls", ok, detail, checks)
+        ok, detail = _serving_capacity_ok()
+        _check("serving_capacity", ok, detail, checks)
         ok, detail = _latency_slo_ok()
         _check("latency_slo_standard", ok, detail, checks)
         ok, detail = _latency_slo_ok("DEEP_")

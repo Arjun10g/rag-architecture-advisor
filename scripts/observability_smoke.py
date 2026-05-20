@@ -10,6 +10,7 @@ os.environ["RATE_LIMIT_ENABLED"] = "false"
 os.environ["RETRIEVAL_MODE"] = "lexical"
 os.environ["VECTOR_STORE_BACKEND"] = "memory"
 os.environ["PREWARM_RETRIEVER"] = "false"
+os.environ["METRICS_AUTH_TOKEN"] = "smoke-token"
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -22,17 +23,25 @@ def main() -> None:
     previous_rate_limit = os.environ.get("RATE_LIMIT_ENABLED")
     previous_retrieval_mode = os.environ.get("RETRIEVAL_MODE")
     previous_vector_backend = os.environ.get("VECTOR_STORE_BACKEND")
+    previous_metrics_token = os.environ.get("METRICS_AUTH_TOKEN")
     os.environ["LLM_PROVIDER"] = "disabled"
     os.environ["RATE_LIMIT_ENABLED"] = "false"
     os.environ["RETRIEVAL_MODE"] = "lexical"
     os.environ["VECTOR_STORE_BACKEND"] = "memory"
+    os.environ["METRICS_AUTH_TOKEN"] = "smoke-token"
     try:
-        before = metrics_api()
+        before = metrics_api("smoke-token")
         health = health_api()
         if "status" not in health or "checks" not in health:
             raise AssertionError("health endpoint changed shape")
+        try:
+            metrics_api("wrong-token")
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("metrics endpoint should require the operations token")
         payload = advise_api("Build an internal API docs assistant over fast-moving SDK docs.")
-        after = metrics_api()
+        after = metrics_api("smoke-token")
     finally:
         if previous_provider is None:
             os.environ.pop("LLM_PROVIDER", None)
@@ -50,6 +59,10 @@ def main() -> None:
             os.environ.pop("VECTOR_STORE_BACKEND", None)
         else:
             os.environ["VECTOR_STORE_BACKEND"] = previous_vector_backend
+        if previous_metrics_token is None:
+            os.environ.pop("METRICS_AUTH_TOKEN", None)
+        else:
+            os.environ["METRICS_AUTH_TOKEN"] = previous_metrics_token
 
     if "runtime" not in payload or "graph_timings_ms" not in payload["runtime"]:
         raise AssertionError("public API no longer exposes runtime timings")

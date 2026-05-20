@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import os
+import re
 from typing import Callable
 
 from graph.edges import SPECIALIST_NAMES
@@ -15,6 +17,7 @@ FOCUS_QUERIES = {
     "cloud_iac": "embedding dimension lower higher storage recall quality vector search blue-green dimension changes managed vector options model endpoints observability",
     "evaluation": "RAG evaluation gold set retrieval metrics nDCG MRR citation latency percentiles CI",
 }
+RAW_CORPUS_PATH_RE = re.compile(r"\bcorpus/(?:[^\s`),;]+)?")
 
 
 RetrieveFn = Callable[[str, str, int, dict[str, str] | None], list[SearchResult]]
@@ -46,10 +49,14 @@ def _snippet(text: str, limit: int = 240) -> str:
         if stripped.startswith("#"):
             continue
         lines.append(stripped)
-    compact = " ".join(lines).strip() or " ".join(text.split())
+    compact = _sanitize_snippet(" ".join(lines).strip() or " ".join(text.split()))
     if len(compact) <= limit:
         return compact
     return f"{compact[: limit - 3].rstrip()}..."
+
+
+def _sanitize_snippet(text: str) -> str:
+    return RAW_CORPUS_PATH_RE.sub("the curated corpus", text)
 
 
 def _run_specialist(
@@ -144,7 +151,17 @@ def _run_specialists_batched(state: AdvisorState) -> dict[str, Finding] | None:
     names = list(SPECIALIST_NAMES)
     queries = [f"{state.user_brief} {FOCUS_QUERIES[name]}" for name in names]
     try:
-        result_batches = search_many(queries, top_k=8, namespace="knowledge", filters=None)
+        shared_dense = getattr(retriever, "search_many_with_shared_dense", None)
+        if _env_bool("SPECIALIST_SHARED_DENSE_QUERY", True) and shared_dense is not None:
+            result_batches = shared_dense(
+                queries,
+                state.user_brief,
+                top_k=8,
+                namespace="knowledge",
+                filters=None,
+            )
+        else:
+            result_batches = search_many(queries, top_k=8, namespace="knowledge", filters=None)
     except Exception:
         return None
     return {
@@ -155,3 +172,10 @@ def _run_specialists_batched(state: AdvisorState) -> dict[str, Finding] | None:
         )
         for name, results in zip(names, result_batches)
     }
+
+
+def _env_bool(key: str, default: bool) -> bool:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}

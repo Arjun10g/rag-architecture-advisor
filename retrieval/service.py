@@ -173,6 +173,43 @@ class DenseHybridRetriever:
             for lexical_results, dense_results in zip(lexical_batches, dense_batches)
         ]
 
+    def search_many_with_shared_dense(
+        self,
+        lexical_queries: list[str],
+        dense_query: str,
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        lexical_batches = (
+            self.lexical.search_many(
+                lexical_queries,
+                top_k=self.lexical_top_k,
+                namespace=namespace,
+                filters=filters,
+            )
+            if hasattr(self.lexical, "search_many")
+            else [
+                self.lexical.search(
+                    query,
+                    top_k=self.lexical_top_k,
+                    namespace=namespace,
+                    filters=filters,
+                )
+                for query in lexical_queries
+            ]
+        )
+        dense_results = self.dense.search(
+            dense_query,
+            top_k=self.dense_top_k,
+            namespace=namespace,
+            filters=filters,
+        )
+        return [
+            self._fuse_results(lexical_results, dense_results, top_k=top_k)
+            for lexical_results in lexical_batches
+        ]
+
     def _fuse_results(
         self,
         lexical_results: list[SearchResult],
@@ -229,6 +266,38 @@ class RerankRetriever:
             if self.allow_fallback:
                 return candidates[:top_k]
             raise
+
+    def search_many_with_shared_dense(
+        self,
+        lexical_queries: list[str],
+        dense_query: str,
+        top_k: int = 8,
+        namespace: str | None = None,
+        filters: dict[str, str] | None = None,
+    ) -> list[list[SearchResult]]:
+        shared_search = getattr(self.base, "search_many_with_shared_dense", None)
+        if shared_search is None:
+            return [
+                self.search(query, top_k=top_k, namespace=namespace, filters=filters)
+                for query in lexical_queries
+            ]
+        candidate_batches = shared_search(
+            lexical_queries,
+            dense_query,
+            top_k=max(top_k, self.candidate_top_k),
+            namespace=namespace,
+            filters=filters,
+        )
+        batches: list[list[SearchResult]] = []
+        for query, candidates in zip(lexical_queries, candidate_batches):
+            try:
+                batches.append(self.reranker.rerank(query, candidates, top_k=top_k))
+            except RerankerUnavailable:
+                if self.allow_fallback:
+                    batches.append(candidates[:top_k])
+                else:
+                    raise
+        return batches
 
 
 def build_retriever(

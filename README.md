@@ -147,8 +147,10 @@ are configured. Before treating an environment as production, run:
 
 ```bash
 python3 scripts/production_readiness_check.py --profile production
+python3 scripts/public_surface_probe.py --url https://<space-or-host>/
 python3 scripts/api_output_probe.py --url https://<space-or-host>/ --runs 5 --slo-from-env
 python3 scripts/api_output_probe.py --url https://<space-or-host>/ --deep-thinking --slo-from-env
+python3 scripts/load_probe.py --url https://<space-or-host>/ --requests 6 --concurrency 3 --slo-from-env
 python3 scripts/hf_generation_probe.py
 python3 scripts/qdrant_blue_green_promote.py --target-table rag_advisor_chunks --alias-table rag_advisor_chunks_live --dry-run
 ```
@@ -157,11 +159,21 @@ Production settings to verify:
 
 - Set `HF_TOKEN`, `LLM_PROVIDER=hf`, and `HF_INFERENCE_MODEL` as deployment
   secrets/variables. The probes never print token values.
-- Set `GRADIO_AUTH_USERNAME` and `GRADIO_AUTH_PASSWORD`, or put the app behind an
-  authenticated gateway with rate limits.
+- Set `PUBLIC_ACCESS_MODE=authenticated` with `GRADIO_AUTH_USERNAME` and
+  `GRADIO_AUTH_PASSWORD`, or use `PUBLIC_ACCESS_MODE=gateway` only when a real
+  authenticated gateway is in front of the app. Anonymous public mode must set
+  `ALLOW_ANONYMOUS_PUBLIC=true` intentionally.
 - Set `RATE_LIMIT_ENABLED=true` with `RATE_LIMIT_MAX_REQUESTS` and
-  `RATE_LIMIT_WINDOW_SECONDS`, or set `EXTERNAL_RATE_LIMITING=true` only when an
-  upstream gateway enforces the limit.
+  `RATE_LIMIT_WINDOW_SECONDS`; keep separate deep-mode limits with
+  `RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS` and
+  `RATE_LIMIT_ADVISOR_DEEP_WINDOW_SECONDS`. Set `EXTERNAL_RATE_LIMITING=true`
+  only when an upstream gateway enforces the limit.
+- Set `ADVISOR_CONCURRENCY_LIMIT` and `ADVISOR_QUEUE_MAX_SIZE` for the chosen
+  hardware. CPU-basic Spaces should stay conservative and must pass
+  `load_probe.py` before public traffic is increased.
+- Set `MAX_BRIEF_CHARS`, `MAX_ELICITATION_CHARS`, `MAX_CONFLICT_CHARS`,
+  `LLM_MAX_TOKENS`, and `DEEP_RESEARCH_MAX_FULL_TEXT_LINKS` to bounded public
+  values before enabling public traffic.
 - Keep `SHOW_RAW_TRACE=false` so debug JSON is hidden in the UI. The public
   `/advise` endpoint never returns the raw graph state.
 - Set `ADVISOR_AUDIT_LOG_PATH` to a persistent log sink or mounted volume, for
@@ -194,9 +206,39 @@ Production settings to verify:
   `DEEP_RESEARCH_RETRIEVAL_MODE=lexical` unless you explicitly want the research
   sidecar to spend dense-query latency; the main advisor retrieval can still run
   as `RETRIEVAL_MODE=hybrid`.
-- Use the public Gradio API endpoints `/health` and `/metrics` for uptime and
-  latency checks. They expose non-secret runtime settings, request counts,
-  p50/p95/p99 latency, the last graph timing breakdown, and error counts.
+- Use `/health` for uptime checks. Use `/metrics` only with `METRICS_AUTH_TOKEN`
+  or `OPERATIONS_TOKEN`; it exposes request counts, p50/p95/p99 latency, the
+  last graph timing breakdown, and error counts.
+
+Public launch mode used by the hosted Space:
+
+```bash
+PUBLIC_ACCESS_MODE=authenticated
+GRADIO_AUTH_USERNAME=<set as variable>
+GRADIO_AUTH_PASSWORD=<set as secret>
+METRICS_AUTH_TOKEN=<set as secret>
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_MAX_REQUESTS=30
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_ADVISOR_DEEP_MAX_REQUESTS=6
+RATE_LIMIT_ADVISOR_DEEP_WINDOW_SECONDS=300
+ADVISOR_CONCURRENCY_LIMIT=2
+ADVISOR_QUEUE_MAX_SIZE=32
+```
+
+Rollback path:
+
+```bash
+python3 scripts/qdrant_blue_green_promote.py \
+  --target-table <previous_physical_table_base> \
+  --alias-table rag_advisor_chunks_live \
+  --dimensions 1024,512 \
+  --write-env
+```
+
+For an application rollback, redeploy the previous Git commit or switch the Space
+runtime back to the previous Space revision, then run `public_surface_probe.py`,
+`api_output_probe.py`, and `load_probe.py` again.
 
 ## Retrieval Modes
 

@@ -32,6 +32,117 @@ EXAMPLE_BRIEFS = [
     "Build a mental health therapy literature assistant for clinicians reviewing CBT studies and narrative research notes, with citation support and lower exact-match pressure than API documentation.",
     "We need a RAG system, but the domain, document type, sensitivity, update cadence, and latency requirements are not known yet.",
 ]
+APP_CSS = """
+.gradio-container {
+  width: 100% !important;
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+body, gradio-app { overflow-x: hidden !important; }
+.gradio-container .main { width: 100% !important; max-width: 100% !important; }
+.gradio-container * { box-sizing: border-box !important; min-width: 0 !important; }
+.advisor-shell { padding: 18px 0 6px; border-bottom: 1px solid #e5e7eb; margin-bottom: 14px; }
+.advisor-title h1 { margin-bottom: 4px !important; font-size: 32px !important; letter-spacing: 0 !important; }
+.advisor-title p { margin: 0 !important; color: #475569; font-size: 15px; white-space: normal !important; }
+.advisor-notice { color: #475569; font-size: 13px; }
+.advisor-input-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr) !important;
+  gap: 16px !important;
+  align-items: start !important;
+}
+.advisor-input-grid > *, .advisor-main-column, .advisor-side-column {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.advisor-action-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) !important;
+  gap: 16px !important;
+}
+.advisor-tabs [role="tablist"], .advisor-tabs .tab-nav {
+  overflow-x: auto !important;
+  flex-wrap: nowrap !important;
+}
+textarea, .wrap textarea { font-size: 15px !important; line-height: 1.45 !important; }
+button { max-width: 100% !important; white-space: normal !important; }
+.contain .tabs { border-radius: 6px !important; }
+footer { display: none !important; }
+@media (max-width: 720px) {
+  .gradio-container {
+    max-width: 100vw !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .gradio-container .main {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+  .gradio-container .block,
+  .gradio-container .wrap,
+  .gradio-container .form,
+  .advisor-shell,
+  .advisor-input-grid,
+  .advisor-action-row,
+  .advisor-tabs {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+  .advisor-main-column,
+  .advisor-side-column,
+  .advisor-input-grid > *,
+  .advisor-action-row > *,
+  .advisor-action-row button {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+  .advisor-shell { padding-top: 14px; }
+  .advisor-title h1 { font-size: 28px !important; line-height: 1.12 !important; }
+  .advisor-title p { font-size: 14px !important; line-height: 1.45 !important; }
+  .advisor-input-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .advisor-action-row { grid-template-columns: minmax(0, 1fr) !important; }
+  .advisor-title p, .advisor-notice, .advisor-notice * {
+    max-width: 100% !important;
+    overflow-wrap: anywhere !important;
+  }
+  .gradio-container .row { flex-direction: column !important; flex-wrap: nowrap !important; }
+  .gradio-container .column {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex-basis: 100% !important;
+  }
+  .gradio-container [role="tablist"], .gradio-container .tab-nav {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    white-space: nowrap !important;
+  }
+}
+"""
+PUBLIC_HEADER_MD = """
+<div class="advisor-shell">
+  <div class="advisor-title">
+    <h1>RAG Architecture Advisor</h1>
+    <p>Retrieval, generation, evaluation, deployment, and governance guidance.</p>
+  </div>
+</div>
+"""
+PUBLIC_NOTICE_MD = """
+**Public beta boundary**
+
+- Do not enter secrets, private customer data, or regulated personal data.
+- The advisor provides architecture guidance, not legal, compliance, medical, or security certification.
+- Briefs are processed by hosted inference and retrieval services. Audit records store hashed brief metadata and decision lineage.
+- Deep thinking reads selected public references and may take longer than a standard run.
+"""
 
 DetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
 ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, str, dict[str, Any]]
@@ -48,6 +159,7 @@ _REQUEST_METRICS: dict[str, Any] = {
     "last_request_at": None,
     "last_timings_ms": {},
 }
+_ALLOWED_PUBLIC_ACCESS_MODES = {"private", "authenticated", "gateway", "anonymous"}
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -55,6 +167,13 @@ def _env_bool(key: str, default: bool = False) -> bool:
     if value is None or not value.strip():
         return default
     return value.lower().strip() in {"1", "true", "yes", "on"}
+
+
+def _env_str(key: str, default: str = "") -> str:
+    value = os.getenv(key)
+    if value is None:
+        return default
+    return value.strip()
 
 
 def _auth_credentials() -> tuple[str, str] | None:
@@ -65,6 +184,21 @@ def _auth_credentials() -> tuple[str, str] | None:
     return (username, password) if username and password else None
 
 
+def _public_access_status() -> tuple[str, bool, str | None]:
+    mode = _env_str("PUBLIC_ACCESS_MODE", "private").lower() or "private"
+    if mode not in _ALLOWED_PUBLIC_ACCESS_MODES:
+        return mode, False, "PUBLIC_ACCESS_MODE must be private, authenticated, gateway, or anonymous"
+    username = _env_str("GRADIO_AUTH_USERNAME")
+    password = _env_str("GRADIO_AUTH_PASSWORD")
+    if mode == "authenticated" and not (username and password):
+        return mode, False, "authenticated mode requires Gradio username and password"
+    if mode == "gateway" and not _env_bool("EXTERNAL_AUTH_GATEWAY"):
+        return mode, False, "gateway mode requires EXTERNAL_AUTH_GATEWAY=true"
+    if mode == "anonymous" and not _env_bool("ALLOW_ANONYMOUS_PUBLIC"):
+        return mode, False, "anonymous mode requires ALLOW_ANONYMOUS_PUBLIC=true"
+    return mode, True, None
+
+
 def _env_int(key: str, default: int) -> int:
     value = os.getenv(key)
     if value is None or not value.strip():
@@ -72,12 +206,29 @@ def _env_int(key: str, default: int) -> int:
     return int(value)
 
 
+def _rate_limit_key(bucket: str, suffix: str) -> str:
+    normalized = "".join(ch if ch.isalnum() else "_" for ch in bucket.upper()).strip("_")
+    return f"RATE_LIMIT_{normalized}_{suffix}"
+
+
 def _enforce_rate_limit(bucket: str) -> None:
     if not _env_bool("RATE_LIMIT_ENABLED", False):
         return
 
-    max_requests = max(1, _env_int("RATE_LIMIT_MAX_REQUESTS", 30))
-    window_seconds = max(1, _env_int("RATE_LIMIT_WINDOW_SECONDS", 60))
+    max_requests = max(
+        1,
+        _env_int(
+            _rate_limit_key(bucket, "MAX_REQUESTS"),
+            _env_int("RATE_LIMIT_MAX_REQUESTS", 30),
+        ),
+    )
+    window_seconds = max(
+        1,
+        _env_int(
+            _rate_limit_key(bucket, "WINDOW_SECONDS"),
+            _env_int("RATE_LIMIT_WINDOW_SECONDS", 60),
+        ),
+    )
     now = time.monotonic()
     cutoff = now - window_seconds
     with _RATE_LIMIT_LOCK:
@@ -98,6 +249,48 @@ def _reset_rate_limiter_for_tests() -> None:
         _RATE_LIMIT_EVENTS.clear()
 
 
+def _validate_text_limit(label: str, value: str | None, key: str, default: int) -> str:
+    text = value or ""
+    limit = max(1, _env_int(key, default))
+    if len(text) > limit:
+        raise RuntimeError(f"{label} is too long. Limit it to {limit} characters.")
+    return text
+
+
+def _prepare_advisor_inputs(
+    user_brief: str,
+    elicitation_answers: str | None,
+    conflict_resolution: str | None,
+    deep_thinking: bool,
+) -> tuple[str, str | None, str | None]:
+    brief = _validate_text_limit("Brief", user_brief, "MAX_BRIEF_CHARS", 4000).strip()
+    answers = _validate_text_limit(
+        "Follow-up answers",
+        elicitation_answers,
+        "MAX_ELICITATION_CHARS",
+        2000,
+    )
+    conflict = _validate_text_limit(
+        "Conflict resolution",
+        conflict_resolution,
+        "MAX_CONFLICT_CHARS",
+        1000,
+    )
+    if deep_thinking and not _env_bool("DEEP_THINKING_ENABLED", True):
+        raise RuntimeError("Deep thinking is currently disabled for this deployment.")
+    return brief, answers, conflict
+
+
+def _ops_token() -> str:
+    return _env_str("METRICS_AUTH_TOKEN") or _env_str("OPERATIONS_TOKEN")
+
+
+def _require_ops_token(token: str | None) -> None:
+    configured = _ops_token()
+    if configured and (token or "").strip() != configured:
+        raise RuntimeError("Metrics endpoint requires a valid operations token.")
+
+
 def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
@@ -108,6 +301,14 @@ def _percentile(values: list[float], percentile: float) -> float | None:
 
 def _metrics_sample_limit() -> int:
     return max(10, _env_int("OBSERVABILITY_SAMPLE_LIMIT", 200))
+
+
+def _advisor_concurrency_limit() -> int:
+    return max(1, _env_int("ADVISOR_CONCURRENCY_LIMIT", 2))
+
+
+def _advisor_queue_max_size() -> int:
+    return max(1, _env_int("ADVISOR_QUEUE_MAX_SIZE", 32))
 
 
 def _record_request_metric(
@@ -137,8 +338,9 @@ def _record_request_metric(
         del samples[:-_metrics_sample_limit()]
 
 
-def metrics_api() -> dict[str, Any]:
+def metrics_api(token: str = "") -> dict[str, Any]:
     """Return process-local advisor metrics without exposing request content."""
+    _require_ops_token(token)
     with _METRICS_LOCK:
         latencies = list(_REQUEST_METRICS["latencies_ms"])
         return {
@@ -163,6 +365,7 @@ def health_api() -> dict[str, Any]:
     """Return a cheap production health/config summary with no secrets."""
     vector_backend = os.getenv("VECTOR_STORE_BACKEND", "memory").strip().lower()
     qdrant_configured = bool(os.getenv("QDRANT_URL", "").strip() or os.getenv("QDRANT_LOCAL_PATH", "").strip())
+    public_mode, public_access_configured, public_access_error = _public_access_status()
     auth_error = ""
     try:
         auth_configured = bool(_auth_credentials() or _env_bool("EXTERNAL_AUTH_GATEWAY", False))
@@ -179,18 +382,27 @@ def health_api() -> dict[str, Any]:
         "vector_store_backend": vector_backend,
         "vector_store_configured": vector_backend != "qdrant" or qdrant_configured,
         "embedding_provider": os.getenv("EMBEDDING_PROVIDER", "local").strip().lower(),
+        "public_access_mode": public_mode,
+        "public_access_configured": public_access_configured,
+        "public_access_error": public_access_error,
         "auth_configured": auth_configured,
         "auth_error": auth_error,
         "rate_limit_configured": rate_limit_configured,
+        "advisor_concurrency_limit": _advisor_concurrency_limit(),
+        "advisor_queue_max_size": _advisor_queue_max_size(),
+        "metrics_protected": bool(_ops_token()),
         "audit_log_configured": bool(os.getenv("ADVISOR_AUDIT_LOG_PATH", "").strip()),
         "raw_trace_hidden": not _env_bool("SHOW_RAW_TRACE", False),
     }
     return {
         "status": "ok"
-        if checks["vector_store_configured"] and checks["raw_trace_hidden"] and not auth_error
+        if checks["vector_store_configured"]
+        and checks["public_access_configured"]
+        and checks["raw_trace_hidden"]
+        and checks["metrics_protected"]
+        and not auth_error
         else "degraded",
         "checks": checks,
-        "metrics": metrics_api(),
     }
 
 
@@ -731,12 +943,13 @@ def clear_detail_response() -> ClearDetailResponse:
 
 
 def advise(user_brief: str) -> tuple[str, dict[str, Any]]:
-    _enforce_rate_limit("legacy")
-    if not user_brief.strip():
+    brief, _, _ = _prepare_advisor_inputs(user_brief, None, None, False)
+    if not brief:
         return "Enter a brief to generate an initial advisor trace.", {}
+    _enforce_rate_limit("legacy")
 
     graph = build_graph()
-    state = graph.invoke({"user_brief": user_brief})
+    state = graph.invoke({"user_brief": brief})
     return _format_output(state), state.to_dict()
 
 
@@ -746,16 +959,22 @@ def advise_detailed(
     conflict_resolution: str | None = None,
     deep_thinking: bool = False,
 ) -> DetailResponse:
-    _enforce_rate_limit("advisor")
-    if not user_brief.strip():
+    brief, answers, conflict = _prepare_advisor_inputs(
+        user_brief,
+        elicitation_answers,
+        conflict_resolution,
+        deep_thinking,
+    )
+    if not brief:
         return _empty_detail_response("Enter a brief to generate an initial advisor trace.")
+    _enforce_rate_limit("advisor_deep" if deep_thinking else "advisor")
 
     graph = build_graph()
     state = graph.invoke(
         {
-            "user_brief": user_brief,
-            "elicitation_answers": _parse_elicitation_answers(elicitation_answers),
-            "conflict_resolution": (conflict_resolution or "").strip() or None,
+            "user_brief": brief,
+            "elicitation_answers": _parse_elicitation_answers(answers),
+            "conflict_resolution": (conflict or "").strip() or None,
             "deep_thinking": deep_thinking,
         }
     )
@@ -839,36 +1058,53 @@ def build_demo():
 
     with gr.Blocks(title="RAG Architecture Advisor") as demo:
         show_raw_trace = _env_bool("SHOW_RAW_TRACE", False)
-        gr.Markdown("# RAG Architecture Advisor")
-        with gr.Row():
-            brief = gr.Textbox(label="Brief", lines=8, placeholder="Describe the RAG use case...")
-        with gr.Accordion("Follow-up answers", open=False):
-            elicitation_answers = gr.Textbox(
-                label="Elicitation answers",
-                lines=4,
-                placeholder='JSON like {"A7": "periodic"} or lines like A7=periodic',
-            )
-            conflict_resolution = gr.Textbox(
-                label="Conflict resolution",
-                lines=2,
-                placeholder="Example: preserve_compliance",
-            )
-            deep_thinking = gr.Checkbox(
-                label="Deep thinking",
-                value=False,
-                info="Run parallel research agents over literature, agent libraries, GitHub, Medium, and Hugging Face references.",
-            )
-        with gr.Row():
-            run = gr.Button("Advise", variant="primary")
-            clear = gr.Button("Clear")
-        gr.Examples(examples=EXAMPLE_BRIEFS, inputs=brief)
+        gr.HTML(f"<style>{APP_CSS}</style>")
+        gr.Markdown(PUBLIC_HEADER_MD)
+        with gr.Row(equal_height=False, elem_classes=["advisor-input-grid"]):
+            with gr.Column(scale=2, min_width=0, elem_classes=["advisor-main-column"]):
+                brief = gr.Textbox(
+                    label="Brief",
+                    lines=9,
+                    max_lines=14,
+                    placeholder=(
+                        "Describe the use case, users, sources, freshness, sensitivity, "
+                        "latency, and citation needs. Do not paste secrets."
+                    ),
+                )
+                with gr.Row(elem_classes=["advisor-action-row"]):
+                    run = gr.Button("Advise", variant="primary", scale=2)
+                    clear = gr.Button("Clear", scale=1)
+                gr.Examples(examples=EXAMPLE_BRIEFS, inputs=brief, label="Examples")
+                with gr.Accordion("Optional controls", open=False):
+                    elicitation_answers = gr.Textbox(
+                        label="Follow-up answers",
+                        lines=4,
+                        placeholder='JSON like {"A7": "periodic"} or lines like A7=periodic',
+                    )
+                    conflict_resolution = gr.Textbox(
+                        label="Conflict resolution",
+                        lines=2,
+                        placeholder="Example: preserve_compliance",
+                    )
+                    deep_thinking = gr.Checkbox(
+                        label="Deep thinking",
+                        value=False,
+                    )
+            with gr.Column(scale=1, min_width=0, elem_classes=["advisor-side-column"]):
+                gr.Markdown(PUBLIC_NOTICE_MD, elem_classes=["advisor-notice"])
+                with gr.Accordion("Operational boundary", open=False):
+                    gr.Markdown(
+                        "Public runs are rate limited. Standard mode is the default. "
+                        "Deep thinking is reserved for briefs that need full-reference "
+                        "research synthesis."
+                    )
 
-        with gr.Tabs():
+        with gr.Tabs(elem_classes=["advisor-tabs"]):
             with gr.Tab("Recommendation"):
                 recommendation = gr.Markdown(label="Recommendation")
             with gr.Tab("Architecture"):
                 decisions = gr.Markdown(label="Architecture Decisions")
-            with gr.Tab("Sources"):
+            with gr.Tab("Evidence"):
                 sources = gr.Dataframe(
                     headers=["#", "Used By", "Evidence", "Section", "Reasoning Chunk"],
                     datatype=["number", "str", "str", "str", "str"],
@@ -894,6 +1130,7 @@ def build_demo():
         metrics_payload = gr.JSON(label="Metrics Response", visible=False)
         health_trigger = gr.Button("Health", visible=False)
         metrics_trigger = gr.Button("Metrics", visible=False)
+        metrics_token = gr.Textbox(label="Metrics Token", visible=False)
 
         outputs = [recommendation, decisions, sources, deployment, terraform, trace, research, raw_trace]
         run.click(
@@ -902,6 +1139,8 @@ def build_demo():
             outputs=outputs,
             api_name="advise_detailed",
             api_visibility="private",
+            concurrency_limit=_advisor_concurrency_limit(),
+            concurrency_id="advisor",
         )
         clear.click(
             fn=clear_detail_response,
@@ -917,6 +1156,8 @@ def build_demo():
             api_name="advise",
             api_description="Return the public advisor response without raw graph internals.",
             api_visibility="public",
+            concurrency_limit=_advisor_concurrency_limit(),
+            concurrency_id="advisor",
         )
         health_trigger.click(
             fn=health_api,
@@ -928,12 +1169,13 @@ def build_demo():
         )
         metrics_trigger.click(
             fn=metrics_api,
-            inputs=None,
+            inputs=metrics_token,
             outputs=metrics_payload,
             api_name="metrics",
-            api_description="Return process-local latency/error counters without request text.",
+            api_description="Return token-protected latency/error counters without request text.",
             api_visibility="public",
         )
+        demo.queue(max_size=_advisor_queue_max_size())
     return demo
 
 
