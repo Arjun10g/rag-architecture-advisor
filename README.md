@@ -200,7 +200,9 @@ Production settings to verify:
   remains useful as a local build artifact and fallback.
 - On Hugging Face Spaces, set `EMBEDDING_PROVIDER=hf` so query embeddings run on
   HF feature extraction instead of `cpu-basic`. Set `PREWARM_RETRIEVER=true` to
-  pay embedding setup during startup instead of on the first request.
+  pay embedding setup during startup instead of on the first request. Keep
+  `EMBEDDING_QUERY_CACHE_SIZE` and `EMBEDDING_QUERY_CACHE_TTL_SECONDS` enabled
+  to avoid repeated remote embedding calls for identical public requests.
 - Keep `LATENCY_SLO_P50_MS=12000` and `LATENCY_SLO_P99_MS=20000` as the standard
   hosted hybrid/Qdrant SLO. Deep-thinking/full-text mode uses
   `DEEP_LATENCY_SLO_P50_MS=25000` and `DEEP_LATENCY_SLO_P99_MS=35000`.

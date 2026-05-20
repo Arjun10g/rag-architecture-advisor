@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from hashlib import sha256
 import math
@@ -8,6 +9,7 @@ from pathlib import Path
 import pickle
 import re
 import threading
+import time
 from typing import Any
 
 from retrieval.chunking import Chunk
@@ -20,6 +22,8 @@ DEFAULT_DIMENSIONS = (1024, 768, 512, 384, 256)
 _MODEL_CACHE: dict[str, Any] = {}
 _MODEL_CACHE_LOCK = threading.Lock()
 _MODEL_ENCODE_LOCK = threading.Lock()
+_QUERY_VECTOR_CACHE: OrderedDict[tuple[str, str, int, str], tuple[float, list[float]]] = OrderedDict()
+_QUERY_CACHE_LOCK = threading.Lock()
 
 
 class EmbeddingUnavailable(RuntimeError):
@@ -64,6 +68,28 @@ class SentenceTransformerEmbedder:
         _validate_dimension(dimension, self.config.native_dimension)
 
         prepared = [self._prepare_query(text) for text in texts] if is_query else texts
+        if is_query and _query_cache_size() > 0:
+            return self._encode_queries_cached(prepared, dimension=dimension)
+        return self._encode_prepared(prepared, dimension=dimension)
+
+    def _encode_queries_cached(self, texts: list[str], *, dimension: int) -> list[list[float]]:
+        cached: dict[int, list[float]] = {}
+        misses: list[tuple[int, str]] = []
+        for index, text in enumerate(texts):
+            cached_vector = _query_cache_get(self.config, text, dimension)
+            if cached_vector is None:
+                misses.append((index, text))
+            else:
+                cached[index] = cached_vector
+
+        if misses:
+            miss_vectors = self._encode_prepared([text for _, text in misses], dimension=dimension)
+            for (index, text), vector in zip(misses, miss_vectors):
+                cached[index] = vector
+                _query_cache_set(self.config, text, dimension, vector)
+        return [cached[index] for index in range(len(texts))]
+
+    def _encode_prepared(self, prepared: list[str], *, dimension: int) -> list[list[float]]:
         if self.config.provider.lower().strip() in {"hf", "huggingface", "huggingface_hub"}:
             return self._encode_hf(prepared, dimension=dimension)
 
@@ -228,6 +254,61 @@ def _env_int(key: str, default: int) -> int:
     if value is None or not value.strip():
         return default
     return int(value)
+
+
+def _query_cache_size() -> int:
+    return max(0, _env_int("EMBEDDING_QUERY_CACHE_SIZE", 128))
+
+
+def _query_cache_ttl_seconds() -> float:
+    return max(1.0, _env_float("EMBEDDING_QUERY_CACHE_TTL_SECONDS", 600.0))
+
+
+def _query_cache_key(config: EmbeddingConfig, text: str, dimension: int) -> tuple[str, str, int, str]:
+    provider = config.provider.lower().strip()
+    model = config.model_name.strip()
+    return provider, model, dimension, sha256(text.encode("utf-8")).hexdigest()
+
+
+def _query_cache_get(
+    config: EmbeddingConfig,
+    text: str,
+    dimension: int,
+) -> list[float] | None:
+    key = _query_cache_key(config, text, dimension)
+    now = time_now()
+    ttl = _query_cache_ttl_seconds()
+    with _QUERY_CACHE_LOCK:
+        cached = _QUERY_VECTOR_CACHE.get(key)
+        if cached is None:
+            return None
+        created_at, vector = cached
+        if now - created_at > ttl:
+            _QUERY_VECTOR_CACHE.pop(key, None)
+            return None
+        _QUERY_VECTOR_CACHE.move_to_end(key)
+        return list(vector)
+
+
+def _query_cache_set(
+    config: EmbeddingConfig,
+    text: str,
+    dimension: int,
+    vector: list[float],
+) -> None:
+    max_size = _query_cache_size()
+    if max_size <= 0:
+        return
+    key = _query_cache_key(config, text, dimension)
+    with _QUERY_CACHE_LOCK:
+        _QUERY_VECTOR_CACHE[key] = (time_now(), list(vector))
+        _QUERY_VECTOR_CACHE.move_to_end(key)
+        while len(_QUERY_VECTOR_CACHE) > max_size:
+            _QUERY_VECTOR_CACHE.popitem(last=False)
+
+
+def time_now() -> float:
+    return time.monotonic()
 
 
 def _env_float(key: str, default: float) -> float:
