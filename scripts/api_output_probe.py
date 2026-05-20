@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -77,6 +78,22 @@ def _find_forbidden_keys(value: Any, path: str = "$") -> list[str]:
     return []
 
 
+def _first_env(*keys: str) -> str | None:
+    for key in keys:
+        value = os.getenv(key)
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def _client_auth(args: argparse.Namespace) -> tuple[str, str] | None:
+    username = args.auth_username or os.getenv("GRADIO_AUTH_USERNAME", "").strip()
+    password = args.auth_password or os.getenv("GRADIO_AUTH_PASSWORD", "").strip()
+    if bool(username) != bool(password):
+        raise AssertionError("Provide both Gradio auth username and password, or neither.")
+    return (username, password) if username and password else None
+
+
 def _predict(args: argparse.Namespace) -> dict[str, Any]:
     try:
         from gradio_client import Client
@@ -85,7 +102,11 @@ def _predict(args: argparse.Namespace) -> dict[str, Any]:
             "gradio_client is required. Install requirements.txt before running this probe."
         ) from exc
 
-    client = Client(args.url)
+    client = Client(
+        args.url,
+        token=args.hf_token or _first_env("HF_TOKEN", "HF_ACCESS_TOKEN"),
+        auth=_client_auth(args),
+    )
     result = client.predict(
         user_brief=args.brief,
         elicitation_answers=args.elicitation_answers,
@@ -120,8 +141,6 @@ def _latency_summary(values: list[float]) -> dict[str, float]:
 
 
 def _optional_env_float(key: str) -> float | None:
-    import os
-
     value = os.getenv(key)
     if value is None or not value.strip():
         return None
@@ -264,6 +283,9 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--show-preview", action="store_true")
     parser.add_argument("--deep-thinking", action="store_true")
+    parser.add_argument("--hf-token", default=None, help="HF token for private Spaces; defaults to HF_TOKEN/HF_ACCESS_TOKEN.")
+    parser.add_argument("--auth-username", default=None, help="Gradio auth username; defaults to GRADIO_AUTH_USERNAME.")
+    parser.add_argument("--auth-password", default=None, help="Gradio auth password; defaults to GRADIO_AUTH_PASSWORD.")
     parser.add_argument("--slo-p50-ms", type=float, default=None)
     parser.add_argument("--slo-p99-ms", type=float, default=None)
     parser.add_argument(
