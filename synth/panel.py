@@ -44,7 +44,13 @@ def _source_ids(evidence_pack: dict | None, *agents: str, limit: int = 3) -> lis
         return []
     source_ids: list[str] = []
     for agent in agents:
-        for source in evidence_pack.get("by_agent", {}).get(agent, []):
+        displayable = [
+            source
+            for source in evidence_pack.get("by_agent", {}).get(agent, [])
+            if int(source.get("evidence_quality") or 0) >= 0
+        ]
+        fallback = evidence_pack.get("by_agent", {}).get(agent, [])
+        for source in displayable or fallback:
             source_id = str(source.get("source_id") or "")
             if source_id and source_id not in source_ids:
                 source_ids.append(source_id)
@@ -53,19 +59,31 @@ def _source_ids(evidence_pack: dict | None, *agents: str, limit: int = 3) -> lis
     return source_ids
 
 
+def _evidence_refs(evidence_pack: dict | None, source_ids: list[str]) -> list[str]:
+    labels = (evidence_pack or {}).get("labels", {})
+    return [labels[source_id] for source_id in source_ids if source_id in labels]
+
+
 def _evidence_chunks(evidence_pack: dict | None, *agents: str, limit: int = 2) -> list[dict]:
     if not evidence_pack:
         return []
     chunks: list[dict] = []
     seen: set[str] = set()
     for agent in agents:
-        for source in evidence_pack.get("by_agent", {}).get(agent, []):
+        displayable = [
+            source
+            for source in evidence_pack.get("by_agent", {}).get(agent, [])
+            if int(source.get("evidence_quality") or 0) >= 0
+        ]
+        fallback = evidence_pack.get("by_agent", {}).get(agent, [])
+        for source in displayable or fallback:
             source_id = str(source.get("source_id") or "")
             if not source_id or source_id in seen:
                 continue
             seen.add(source_id)
             chunks.append(
                 {
+                    "evidence_label": source.get("evidence_label") or (evidence_pack.get("labels", {}).get(source_id, "")),
                     "source_id": source_id,
                     "section": source.get("section") or "",
                     "snippet": source.get("snippet") or "",
@@ -87,6 +105,7 @@ def _record(
     evidence_pack: dict | None,
 ) -> dict:
     agents = SOURCE_AGENTS_BY_ATTR.get(attr, ("retrieval", "evaluation"))
+    source_ids = _source_ids(evidence_pack, *agents)
     return {
         "kind": kind,
         "attr": attr,
@@ -95,16 +114,18 @@ def _record(
         "reasoning": reasoning,
         "decision_effect": decision_effect,
         "accepted_tradeoff": accepted_tradeoff,
-        "source_ids": _source_ids(evidence_pack, *agents),
+        "source_ids": source_ids,
+        "evidence_refs": _evidence_refs(evidence_pack, source_ids),
         "evidence_chunks": _evidence_chunks(evidence_pack, *agents),
     }
 
 
 def _format_record(record: dict) -> str:
-    source_ids = " ".join(f"`{source_id}`" for source_id in record.get("source_ids") or [])
-    citation = f" {source_ids}" if source_ids else ""
+    refs = " ".join(f"[{ref}]" for ref in record.get("evidence_refs") or [])
+    citation = f" {refs}" if refs else ""
+    heading = record["label"] if record["attr"] == "topology" else f"{record['label']}"
     return (
-        f"{record['attr']} {record['label']}: {record['reasoning']} "
+        f"{heading}: {record['reasoning']} "
         f"Effect: {record['decision_effect']} "
         f"Tradeoff: {record['accepted_tradeoff']}{citation}"
     )
@@ -121,6 +142,7 @@ def _topology_strength(topology: dict, evidence_pack: dict | None) -> dict:
         "decision_effect": "The recommendation is auditable because the selected stages are deterministic.",
         "accepted_tradeoff": "The catalog constrains creativity in exchange for repeatability and eval coverage.",
         "source_ids": source_ids,
+        "evidence_refs": _evidence_refs(evidence_pack, source_ids),
         "evidence_chunks": _evidence_chunks(evidence_pack, "retrieval", "evaluation"),
     }
 
@@ -237,6 +259,7 @@ def _operational_records(state: AdvisorState, evidence_pack: dict | None) -> lis
                 "decision_effect": "The recommendation should be treated as provisional.",
                 "accepted_tradeoff": "The graph can continue with priors, but confidence is lower.",
                 "source_ids": _source_ids(evidence_pack, "evaluation"),
+                "evidence_refs": _evidence_refs(evidence_pack, _source_ids(evidence_pack, "evaluation")),
                 "evidence_chunks": _evidence_chunks(evidence_pack, "evaluation"),
             }
         )
@@ -251,6 +274,10 @@ def _operational_records(state: AdvisorState, evidence_pack: dict | None) -> lis
                 "decision_effect": "The user should choose which tradeoff wins before deployment.",
                 "accepted_tradeoff": "The graph keeps both options visible instead of silently resolving them.",
                 "source_ids": _source_ids(evidence_pack, "security", "evaluation"),
+                "evidence_refs": _evidence_refs(
+                    evidence_pack,
+                    _source_ids(evidence_pack, "security", "evaluation"),
+                ),
                 "evidence_chunks": _evidence_chunks(evidence_pack, "security", "evaluation"),
             }
         )
@@ -277,6 +304,7 @@ def build_panel(
             "requirement": item["requirement"],
             "accepted_tradeoff": item["accepted_tradeoff"],
             "source_ids": item["source_ids"],
+            "evidence_refs": item.get("evidence_refs") or [],
         }
         for item in items
     ]

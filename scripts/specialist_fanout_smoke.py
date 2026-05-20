@@ -19,7 +19,7 @@ def fake_retrieve(
     top_k: int,
     filters: dict[str, str] | None,
 ) -> list[SearchResult]:
-    if "permission aware" in query:
+    if "permission aware" in query or "permission-aware" in query:
         raise RuntimeError("simulated security retrieval outage")
 
     chunk = Chunk(

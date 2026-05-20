@@ -90,13 +90,15 @@ Providers:
 ```bash
 LLM_PROVIDER=hf
 HF_INFERENCE_PROVIDER=auto
-HF_INFERENCE_MODEL=HuggingFaceH4/zephyr-7b-beta
+HF_INFERENCE_MODEL=meta-llama/Llama-3.3-70B-Instruct
 ```
 
 Set `LLM_PROVIDER=disabled` for no-network deterministic output. If
 `huggingface_hub`, the model endpoint, or provider access is unavailable, the app
 falls back to a deterministic generated summary and records the reason in
 `draft_output.generation`.
+The default is a larger Llama instruct model for stronger narrative synthesis;
+you can swap `HF_INFERENCE_MODEL` to any model your Hugging Face token can access.
 
 Every response includes an `audit_record` in raw JSON. Set
 `ADVISOR_AUDIT_LOG_PATH=/path/to/advisor-audit.jsonl` to persist those records in

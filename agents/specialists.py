@@ -10,10 +10,10 @@ from retrieval.service import retrieve
 
 
 FOCUS_QUERIES = {
-    "retrieval": "hybrid retrieval reranking chunking pipeline decision",
-    "security": "permission aware retrieval pii redaction audit lineage security governance",
-    "cloud_iac": "terraform cloud platform mapping vector database model endpoint observability",
-    "evaluation": "rag evaluation gold set faithfulness routing topology metrics ci",
+    "retrieval": "production hybrid RAG pipeline BM25 dense RRF cross encoder rerank exact terminology two-stage",
+    "security": "RBAC permission-aware retrieval ACL propagation pre-filter post-filter audit lineage",
+    "cloud_iac": "embedding dimension lower higher storage recall quality vector search blue-green dimension changes managed vector options model endpoints observability",
+    "evaluation": "RAG evaluation gold set retrieval metrics nDCG MRR citation latency percentiles CI",
 }
 
 
@@ -29,12 +29,23 @@ def _source_ref(result: SearchResult) -> SourceRef:
         section=section,
         source_path=str(chunk.metadata.get("source_path") or chunk.source_path),
         score=round(result.score, 6),
+        element_type=str(chunk.metadata.get("element_type") or ""),
         snippet=_snippet(chunk.text_original),
     )
 
 
 def _snippet(text: str, limit: int = 240) -> str:
-    compact = " ".join(text.split())
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped in {"---", "```", "```text", "```python", "```json", "```yaml"}:
+            continue
+        if stripped.startswith("```"):
+            continue
+        if stripped.startswith("#"):
+            continue
+        lines.append(stripped)
+    compact = " ".join(lines).strip() or " ".join(text.split())
     if len(compact) <= limit:
         return compact
     return f"{compact[: limit - 3].rstrip()}..."
@@ -48,7 +59,7 @@ def _run_specialist(
     retrieve_fn: RetrieveFn,
 ) -> Finding:
     query = f"{user_brief} {FOCUS_QUERIES[name]}"
-    results = retrieve_fn(query, "knowledge", 5, None)
+    results = retrieve_fn(query, "knowledge", 8, None)
     sources = [_source_ref(result) for result in results]
     source_ids = [source.source_id for source in sources]
     top_sections = [

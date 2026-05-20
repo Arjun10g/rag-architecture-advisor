@@ -25,6 +25,8 @@ def main() -> None:
     content = _extract_chat_content({"choices": [{"message": {"content": "ok"}}]})
     if content != "ok":
         raise AssertionError("chat response parsing changed")
+    if "llama" not in GenerationConfig().model.lower():
+        raise AssertionError("default generator model should use a stronger Llama instruct model")
 
     state = build_graph().invoke(
         {"user_brief": "Build an internal API docs assistant over fast-moving SDK docs."}

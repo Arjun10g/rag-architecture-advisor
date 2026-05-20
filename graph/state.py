@@ -40,6 +40,7 @@ class SourceRef:
     source_path: str
     score: float
     snippet: str = ""
+    element_type: str = ""
 
 
 @dataclass

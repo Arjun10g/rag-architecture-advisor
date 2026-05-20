@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 
-DEFAULT_HF_INFERENCE_MODEL = "HuggingFaceH4/zephyr-7b-beta"
+DEFAULT_HF_INFERENCE_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
 DEFAULT_HF_INFERENCE_PROVIDER = "auto"
 
 
@@ -21,8 +21,8 @@ class GenerationConfig:
     hf_provider: str = DEFAULT_HF_INFERENCE_PROVIDER
     token: str | None = None
     timeout_seconds: float = 30.0
-    max_tokens: int = 700
-    temperature: float = 0.2
+    max_tokens: int = 1800
+    temperature: float = 0.15
     retries: int = 1
 
     @classmethod
@@ -33,8 +33,8 @@ class GenerationConfig:
             hf_provider=os.getenv("HF_INFERENCE_PROVIDER", DEFAULT_HF_INFERENCE_PROVIDER),
             token=_first_env("HF_TOKEN", "HF_ACCESS_TOKEN"),
             timeout_seconds=_env_float("HF_INFERENCE_TIMEOUT_SECONDS", 30.0),
-            max_tokens=_env_int("LLM_MAX_TOKENS", 700),
-            temperature=_env_float("LLM_TEMPERATURE", 0.2),
+            max_tokens=_env_int("LLM_MAX_TOKENS", 1800),
+            temperature=_env_float("LLM_TEMPERATURE", 0.15),
             retries=_env_int("LLM_RETRIES", 1),
         )
 

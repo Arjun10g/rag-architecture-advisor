@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover
 
 from graph.build import build_graph
 from graph.state import AdvisorState
+from synth.panel import ATTRIBUTE_LABELS
 
 
 if load_dotenv:
@@ -33,8 +34,12 @@ DetailResponse = tuple[str, str, list[list[Any]], str, str, str, dict[str, Any]]
 ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
 
 
-def _source_ids_text(source_ids: list[str]) -> str:
-    return " ".join(f"`{source_id}`" for source_id in source_ids)
+def _evidence_refs_text(refs: list[str]) -> str:
+    return " ".join(f"[{ref}]" for ref in refs)
+
+
+def _source_label(source: dict[str, Any], fallback_index: int) -> str:
+    return str(source.get("evidence_label") or f"E{fallback_index}")
 
 
 def _parse_elicitation_answers(value: str | None) -> dict[str, str]:
@@ -55,6 +60,59 @@ def _parse_elicitation_answers(value: str | None) -> dict[str, str]:
     return answers
 
 
+def _requirement_value(state: AdvisorState, attr: str) -> str | None:
+    return state.requirement_vector.get(attr).value if attr in state.requirement_vector else None
+
+
+def _format_topology_rationale(state: AdvisorState, topology: dict) -> str:
+    drivers = []
+    for attr in ("A2", "A3", "A1", "A8", "A11", "A12"):
+        value = _requirement_value(state, attr)
+        if value:
+            drivers.append(f"{ATTRIBUTE_LABELS.get(attr, attr)} is **{value}**")
+    driver_text = "; ".join(drivers)
+    lines = [
+        "Selected by applying the resolved requirements to the fixed topology catalog.",
+    ]
+    if driver_text:
+        lines.append(f"Key drivers: {driver_text}.")
+    lines.extend(_readable_topology_filters(topology))
+    return " ".join(lines)
+
+
+def _readable_topology_filters(topology: dict) -> list[str]:
+    filters = (topology.get("selection") or {}).get("filters") or []
+    readable_filters = []
+    for item in filters:
+        if "A2 high" in item:
+            readable_filters.append(
+                "Dense-only options were removed because exact terminology dependence is high."
+            )
+        elif "A12 gated" in item:
+            readable_filters.append(
+                "Direct-answer options were removed because the workflow requires a review gate."
+            )
+        elif "A8 strict" in item:
+            readable_filters.append(
+                "Adaptive loops were avoided unless risk justified the extra latency."
+            )
+    return readable_filters
+
+
+def _readable_constraint(constraint: str) -> str:
+    if constraint.startswith("A2 high"):
+        return "High exact terminology dependence makes lexical or hybrid retrieval mandatory."
+    if constraint.startswith("A4 sectoral"):
+        return "Sectoral compliance requires in-boundary generation providers."
+    if constraint.startswith("A5 regulated-personal"):
+        return "Regulated personal data requires permission-aware retrieval and redaction."
+    if constraint.startswith("A11 mandatory"):
+        return "Mandatory citation needs require decision lineage logging."
+    if constraint.startswith("A12 gated"):
+        return "Human review requirements rule out direct-answer deployment without a review gate."
+    return constraint
+
+
 def _format_output(state: AdvisorState) -> str:
     output = state.draft_output or {}
     topology = output.get("topology", {})
@@ -71,7 +129,8 @@ def _format_output(state: AdvisorState) -> str:
         "## Why",
     ]
     for entry in state.decision_log[:8]:
-        lines.append(f"- {entry.attr}: {entry.value} ({entry.source})")
+        label = ATTRIBUTE_LABELS.get(entry.attr, entry.attr)
+        lines.append(f"- {label}: {entry.value} ({entry.source.replace('-', ' ')})")
 
     if generated_answer:
         lines.extend(["", "## Generated Advisor Summary", str(generated_answer).strip()])
@@ -89,7 +148,7 @@ def _format_output(state: AdvisorState) -> str:
         for decision in architecture_decisions:
             area = str(decision.get("area") or "decision").replace("_", " ").title()
             choice = decision.get("choice") or "Pending"
-            source_ids = decision.get("source_ids") or []
+            evidence_refs = decision.get("evidence_refs") or []
             lines.append(f"- **{area}:** {choice}")
             if decision.get("rationale"):
                 lines.append(f"  {decision['rationale']}")
@@ -99,8 +158,8 @@ def _format_output(state: AdvisorState) -> str:
                 lines.append(f"  Tradeoff: {decision['tradeoff']}")
             if decision.get("validation"):
                 lines.append(f"  Validate: {decision['validation']}")
-            if source_ids:
-                lines.append(f"  Sources: {_source_ids_text(source_ids[:3])}")
+            if evidence_refs:
+                lines.append(f"  Evidence: {_evidence_refs_text(evidence_refs[:3])}")
 
     if terraform:
         lines.extend(["", "## Terraform Sketch", "```hcl", terraform.strip(), "```"])
@@ -110,10 +169,10 @@ def _format_output(state: AdvisorState) -> str:
         for index, source in enumerate(sources[:8], start=1):
             title = source.get("title") or "Untitled source"
             section = source.get("section") or "Unsectioned"
-            source_id = source.get("source_id") or "unknown"
+            evidence_label = source.get("evidence_label") or f"E{index}"
             used_by = ", ".join(source.get("used_by") or [])
             label = section if section.startswith(title) else f"{title} - {section}"
-            lines.append(f"- [{index}] {label} (`{source_id}`)")
+            lines.append(f"- [{evidence_label}] {label}")
             if used_by:
                 lines.append(f"  Used by: {used_by}")
             if source.get("snippet"):
@@ -129,41 +188,25 @@ def _format_recommendation(state: AdvisorState) -> str:
     generated_answer = output.get("generated_answer")
     lines = [
         f"## {topology.get('name', 'Pending')}",
-        topology.get("rationale", ""),
+        _format_topology_rationale(state, topology),
     ]
 
     if generated_answer:
         lines.extend(["", str(generated_answer).strip()])
 
-    lines.extend([
-        "",
-        "### Requirement Vector",
-    ])
-    for entry in state.decision_log[:12]:
-        confidence = f"{entry.confidence:.2f}"
-        lines.append(f"- **{entry.attr}:** {entry.value} ({entry.source}, confidence {confidence})")
-
     if state.pending_elicitation:
-        lines.extend(["", "### Pending Elicitation"])
+        lines.extend(["", "### Questions To Confirm"])
         for attr in state.pending_elicitation:
-            lines.append(f"- {attr}")
+            lines.append(f"- {ATTRIBUTE_LABELS.get(attr, attr)}")
 
-    lines.extend(["", "### Strengths"])
-    for item in panel.get("strengths", []):
-        lines.append(f"- {item}")
-
-    lines.extend(["", "### Weaknesses"])
-    for item in panel.get("weaknesses", []):
-        lines.append(f"- {item}")
-
-    if panel.get("tradeoffs"):
-        lines.extend(["", "### Accepted Tradeoffs"])
-        for item in panel.get("tradeoffs", []):
-            source_ids = _source_ids_text(item.get("source_ids") or [])
-            citation = f" {source_ids}" if source_ids else ""
-            lines.append(
-                f"- **{item.get('attr')}:** {item.get('accepted_tradeoff')}{citation}"
-            )
+    strengths = panel.get("strengths", [])[:3]
+    weaknesses = panel.get("weaknesses", [])[:3]
+    if strengths or weaknesses:
+        lines.extend(["", "### Advisor Checks"])
+        for item in strengths:
+            lines.append(f"- Strength: {item}")
+        for item in weaknesses:
+            lines.append(f"- Risk: {item}")
 
     return "\n".join(line for line in lines if line is not None)
 
@@ -188,15 +231,16 @@ def _format_architecture_decisions(state: AdvisorState) -> str:
             lines.extend(["", "**Accepted Tradeoff:**", str(decision["tradeoff"])])
         if decision.get("validation"):
             lines.extend(["", "**Validation Gate:**", str(decision["validation"])])
-        source_ids = decision.get("source_ids") or []
-        if source_ids:
-            lines.extend(["", "**Source IDs:** " + _source_ids_text(source_ids)])
+        evidence_refs = decision.get("evidence_refs") or []
+        if evidence_refs:
+            lines.extend(["", "**Evidence:** " + _evidence_refs_text(evidence_refs)])
         evidence_chunks = decision.get("evidence_chunks") or []
         if evidence_chunks:
             lines.extend(["", "**Reasoning Chunks:**"])
             for chunk in evidence_chunks:
+                label = chunk.get("evidence_label") or "E?"
                 lines.append(
-                    f"- `{chunk.get('source_id')}`: {chunk.get('reasoning_chunk') or chunk.get('snippet') or ''}"
+                    f"- [{label}] {chunk.get('reasoning_chunk') or chunk.get('snippet') or ''}"
                 )
         lines.append("")
     return "\n".join(lines).strip()
@@ -210,8 +254,8 @@ def _source_rows(state: AdvisorState) -> list[list[Any]]:
             [
                 index,
                 ", ".join(source.get("used_by") or []),
+                source.get("evidence_label") or f"E{index}",
                 source.get("section") or "",
-                source.get("source_id") or "",
                 source.get("snippet") or "",
             ]
         )
@@ -263,32 +307,111 @@ def _format_deployment(state: AdvisorState) -> str:
 
 
 def _format_trace(state: AdvisorState) -> str:
-    lines = ["## Decision Trace"]
-    for entry in state.decision_log:
-        confidence = f"{entry.confidence:.2f}"
-        lines.append(f"- **{entry.attr}:** {entry.value} ({entry.source}, confidence {confidence})")
-        lines.append(f"  {entry.reason}")
+    output = state.draft_output or {}
+    topology = output.get("topology") or {}
+    evidence_pack = output.get("evidence_pack") or {}
+    decisions = output.get("architecture_decisions") or []
+    panel = output.get("panel") or {}
+
+    lines = [
+        "## Advisor Reasoning Trace",
+        "### 1. Interpreted the brief",
+        f"- Domain prior: **{state.domain_prior or 'unknown'}**.",
+    ]
+
+    stated = [entry for entry in state.decision_log if entry.source == "stated"]
+    strong = [
+        entry
+        for entry in state.decision_log
+        if entry.source == "domain-prior" and entry.confidence >= 0.9
+    ]
+    if stated:
+        lines.append("- User-stated signals:")
+        for entry in stated:
+            label = ATTRIBUTE_LABELS.get(entry.attr, entry.attr)
+            lines.append(f"  - {label}: **{entry.value}**.")
+    if strong:
+        lines.append("- Strong prior signals:")
+        for entry in strong[:6]:
+            label = ATTRIBUTE_LABELS.get(entry.attr, entry.attr)
+            lines.append(f"  - {label}: **{entry.value}**.")
+
+    if state.pending_elicitation:
+        pending_labels = [
+            ATTRIBUTE_LABELS.get(attr, attr)
+            for attr in state.pending_elicitation
+        ]
+        lines.append(
+            "- Still uncertain: "
+            + ", ".join(pending_labels)
+            + ". The recommendation remains provisional until these are confirmed."
+        )
 
     if state.hard_constraints:
-        lines.extend(["", "## Hard Constraints"])
+        lines.extend(["", "### 2. Applied hard constraints"])
         for constraint in state.hard_constraints:
-            lines.append(f"- {constraint}")
+            lines.append(f"- {_readable_constraint(constraint)}")
+
+    sources = evidence_pack.get("sources") or []
+    if sources:
+        lines.extend(["", "### 3. Read the literature chunks"])
+        for index, source in enumerate(sources[:8], start=1):
+            label = _source_label(source, index)
+            used_by = ", ".join(source.get("used_by") or [])
+            section = source.get("section") or "Unsectioned"
+            snippet = source.get("snippet") or ""
+            lines.append(f"- [{label}] {section}")
+            if used_by:
+                lines.append(f"  Used for: {used_by}")
+            if snippet:
+                lines.append(f"  Chunk reasoning: {snippet}")
+
+    if topology:
+        lines.extend(["", "### 4. Selected the topology"])
+        lines.append(f"- Selected **{topology.get('name', 'pending')}**.")
+        lines.append(f"- {_format_topology_rationale(state, topology)}")
+        selection = topology.get("selection") or {}
+        filters = selection.get("filters") or []
+        readable_filters = _readable_topology_filters(topology)
+        if filters and readable_filters:
+            lines.append("- Filters applied:")
+            for item in readable_filters:
+                lines.append(f"  - {item}")
+
+    if decisions:
+        lines.extend(["", "### 5. Turned evidence into architecture decisions"])
+        for decision in decisions:
+            area = str(decision.get("area") or "decision").replace("_", " ").title()
+            refs = _evidence_refs_text(decision.get("evidence_refs") or [])
+            evidence = f" {refs}" if refs else ""
+            lines.append(f"- **{area}:** {decision.get('choice', 'Pending')}{evidence}")
+            if decision.get("rationale"):
+                lines.append(f"  Why: {decision['rationale']}")
+            if decision.get("tradeoff"):
+                lines.append(f"  Tradeoff: {decision['tradeoff']}")
+
+    panel_items = panel.get("items") or []
+    if panel_items:
+        lines.extend(["", "### 6. Checked user-facing tradeoffs"])
+        for item in panel_items[:8]:
+            refs = _evidence_refs_text(item.get("evidence_refs") or [])
+            evidence = f" {refs}" if refs else ""
+            lines.append(
+                f"- **{item.get('label')}:** {item.get('accepted_tradeoff')}{evidence}"
+            )
 
     if state.conflict:
-        lines.extend(["", "## Conflict"])
+        lines.extend(["", "### Unresolved conflict"])
         lines.append(state.conflict.rationale)
         for option in state.conflict.options:
             lines.append(f"- {option}")
 
     if state.critique:
-        lines.extend(["", "## Critique"])
+        lines.extend(["", "### Critic check"])
         for item in state.critique:
             lines.append(f"- {item}")
-
-    if state.graph_trace:
-        lines.extend(["", "## Graph Trace"])
-        for item in state.graph_trace:
-            lines.append(f"- {item}")
+    else:
+        lines.extend(["", "### Critic check", "- No skeleton-level critique remained after synthesis."])
     return "\n".join(lines)
 
 
@@ -373,7 +496,7 @@ def build_demo():
                 decisions = gr.Markdown(label="Architecture Decisions")
             with gr.Tab("Sources"):
                 sources = gr.Dataframe(
-                    headers=["#", "Used By", "Section", "Source ID", "Reasoning Chunk"],
+                    headers=["#", "Used By", "Evidence", "Section", "Reasoning Chunk"],
                     datatype=["number", "str", "str", "str", "str"],
                     interactive=False,
                     label="Reasoning Chunks",
@@ -383,7 +506,7 @@ def build_demo():
             with gr.Tab("Terraform"):
                 terraform = gr.Textbox(label="Terraform Sketch", lines=18)
             with gr.Tab("Trace"):
-                trace = gr.Markdown(label="Decision Trace")
+                trace = gr.Markdown(label="Advisor Reasoning Trace")
             with gr.Tab("Raw JSON"):
                 raw_trace = gr.JSON(label="Raw Trace")
 

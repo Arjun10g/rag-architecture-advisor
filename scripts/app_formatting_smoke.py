@@ -31,14 +31,24 @@ def main() -> None:
         raise AssertionError("source table rows are malformed")
     if not sources[0][-1]:
         raise AssertionError("source table should show reasoning chunks instead of file paths")
+    if any("corpus_" in str(cell) for row in sources for cell in row):
+        raise AssertionError("source table should not expose raw chunk IDs")
+    if any(str(row[-1]).startswith(("Generated:", "```")) for row in sources):
+        raise AssertionError("source table should prefer substantive reasoning chunks")
     if "flowchart LR" not in deployment or "Deployment Projection" not in deployment or "Vector database" not in deployment:
         raise AssertionError("deployment tab is missing projection details")
     if "terraform" not in terraform:
         raise AssertionError("terraform tab is missing sketch")
     if "modules/database/main.tf" not in terraform:
         raise AssertionError("terraform sketch is missing module tree output")
-    if "Decision Trace" not in decision_trace:
-        raise AssertionError("trace tab is missing heading")
+    if "Advisor Reasoning Trace" not in decision_trace or "Read the literature chunks" not in decision_trace:
+        raise AssertionError("trace tab is missing literature-grounded reasoning")
+    visible_output = "\n".join([recommendation, decisions, deployment, decision_trace])
+    forbidden = ["corpus_", "router:start", "Graph Trace", "Requirement Vector", "two_stage_hybrid_rerank", "retrieval_strategy"]
+    if any(token in visible_output for token in forbidden):
+        raise AssertionError("visible output should not expose raw source IDs, graph markers, or internal keys")
+    if "Agentic Reasoning Trace" not in recommendation:
+        raise AssertionError("recommendation should include an agentic reasoning trace")
     if not raw.get("draft_output", {}).get("architecture_decisions"):
         raise AssertionError("raw trace is missing architecture decisions")
     panel = raw.get("draft_output", {}).get("panel", {})
@@ -48,14 +58,14 @@ def main() -> None:
         raise AssertionError("deterministic smoke should use LLM fallback path")
 
     unresolved = advise_detailed("We need a RAG system, but the domain is unknown.")
-    if "Pending Elicitation" not in unresolved[0]:
+    if "Questions To Confirm" not in unresolved[0]:
         raise AssertionError("detailed response should surface pending elicitation")
 
     resolved = advise_detailed(
         "A clinical HIPAA assistant over PHI patient records asks to use an external API.",
         conflict_resolution="preserve_compliance",
     )
-    if "conflict:resolved:preserve_compliance" not in resolved[5]:
+    if "conflict:resolved:preserve_compliance" not in resolved[6].get("graph_trace", []):
         raise AssertionError("conflict resolution control was not passed into the graph")
 
     cleared = clear_detail_response()
