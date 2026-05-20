@@ -9,7 +9,7 @@ if __package__ in {None, ""}:
 
 os.environ["LLM_PROVIDER"] = "disabled"
 
-from app import advise, advise_detailed, clear_detail_response
+from app import advise, advise_api, advise_detailed, clear_detail_response
 
 
 def main() -> None:
@@ -56,6 +56,15 @@ def main() -> None:
         raise AssertionError("panel is missing requirement-specific reasoning")
     if raw.get("draft_output", {}).get("generation", {}).get("status") != "fallback":
         raise AssertionError("deterministic smoke should use LLM fallback path")
+
+    public = advise_api(brief)
+    public_text = str(public)
+    if "raw_trace" in public or "graph_trace" in public or "draft_output" in public:
+        raise AssertionError("public API response should not expose raw graph internals")
+    if any(token in public_text for token in ("corpus_", "source_path", "router:start")):
+        raise AssertionError("public API response should not expose raw source IDs or graph markers")
+    if not public.get("reasoning_chunks") or not public.get("advisor_reasoning_trace"):
+        raise AssertionError("public API response is missing advisor reasoning fields")
 
     unresolved = advise_detailed("We need a RAG system, but the domain is unknown.")
     if "Questions To Confirm" not in unresolved[0]:

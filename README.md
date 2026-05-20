@@ -109,7 +109,16 @@ The probe fails if the displayed answer leaks raw corpus IDs, file paths, router
 trace markers, or raw attribute codes. If the provider is unavailable, the app
 uses deterministic fallback and records the reason in `draft_output.generation`.
 
-Every response includes an `audit_record` in raw JSON. Set
+For Gradio clients, use the public `/advise` endpoint. It returns the advisor
+answer, architecture decisions, reasoning chunks, deployment projection,
+Terraform sketch, public reasoning trace, and generation status without the raw
+graph state:
+
+```bash
+python3 scripts/api_output_probe.py --url http://127.0.0.1:7860
+```
+
+The detailed UI/debug response includes an `audit_record` in raw JSON. Set
 `ADVISOR_AUDIT_LOG_PATH=/path/to/advisor-audit.jsonl` to persist those records in
 deployment.
 

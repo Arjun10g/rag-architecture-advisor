@@ -262,6 +262,31 @@ def _source_rows(state: AdvisorState) -> list[list[Any]]:
     return rows
 
 
+def _public_reasoning_chunks(source_rows: list[list[Any]]) -> list[dict[str, Any]]:
+    chunks: list[dict[str, Any]] = []
+    for row in source_rows:
+        chunks.append(
+            {
+                "rank": row[0],
+                "used_by": row[1],
+                "evidence": row[2],
+                "section": row[3],
+                "reasoning_chunk": row[4],
+            }
+        )
+    return chunks
+
+
+def _public_generation_status(raw_trace: dict[str, Any]) -> dict[str, Any]:
+    generation = raw_trace.get("draft_output", {}).get("generation") or {}
+    return {
+        "status": generation.get("status"),
+        "provider": generation.get("provider"),
+        "model": generation.get("model"),
+        "quality_issue": generation.get("quality_issue"),
+    }
+
+
 def _format_deployment(state: AdvisorState) -> str:
     projection = (state.draft_output or {}).get("projection") or {}
     pipeline_nodes = projection.get("pipeline_nodes") or []
@@ -465,6 +490,37 @@ def advise_detailed(
     )
 
 
+def advise_api(
+    user_brief: str,
+    elicitation_answers: str | None = None,
+    conflict_resolution: str | None = None,
+) -> dict[str, Any]:
+    (
+        recommendation,
+        architecture_decisions,
+        source_rows,
+        deployment_projection,
+        terraform_sketch,
+        advisor_reasoning_trace,
+        raw_trace,
+    ) = advise_detailed(user_brief, elicitation_answers, conflict_resolution)
+    topology = raw_trace.get("draft_output", {}).get("topology") or {}
+    return {
+        "topology": topology.get("name"),
+        "recommendation": recommendation,
+        "architecture_decisions": architecture_decisions,
+        "reasoning_chunks": _public_reasoning_chunks(source_rows),
+        "deployment_projection": deployment_projection,
+        "terraform_sketch": terraform_sketch,
+        "advisor_reasoning_trace": advisor_reasoning_trace,
+        "pending_questions": [
+            ATTRIBUTE_LABELS.get(attr, attr)
+            for attr in raw_trace.get("pending_elicitation", [])
+        ],
+        "generation": _public_generation_status(raw_trace),
+    }
+
+
 def build_demo():
     if gr is None:
         raise RuntimeError("gradio is not installed. Install requirements.txt to run the app.")
@@ -509,14 +565,32 @@ def build_demo():
                 trace = gr.Markdown(label="Advisor Reasoning Trace")
             with gr.Tab("Raw JSON"):
                 raw_trace = gr.JSON(label="Raw Trace")
+        public_api_payload = gr.JSON(label="Public API Response", visible=False)
+        public_api_trigger = gr.Button("Public API", visible=False)
 
         outputs = [recommendation, decisions, sources, deployment, terraform, trace, raw_trace]
         run.click(
             fn=advise_detailed,
             inputs=[brief, elicitation_answers, conflict_resolution],
             outputs=outputs,
+            api_name="advise_detailed",
+            api_visibility="private",
         )
-        clear.click(fn=clear_detail_response, inputs=None, outputs=[brief, *outputs])
+        clear.click(
+            fn=clear_detail_response,
+            inputs=None,
+            outputs=[brief, *outputs],
+            api_name="clear_detail_response",
+            api_visibility="private",
+        )
+        public_api_trigger.click(
+            fn=advise_api,
+            inputs=[brief, elicitation_answers, conflict_resolution],
+            outputs=public_api_payload,
+            api_name="advise",
+            api_description="Return the public advisor response without raw graph internals.",
+            api_visibility="public",
+        )
     return demo
 
 

@@ -123,7 +123,6 @@ terraform {{
 }}
 
 locals {{
-  topology_key    = {_hcl_string(topology["key"])}
   topology_name   = {_hcl_string(topology["name"])}
   pipeline_stages = {_hcl_list(projection["pipeline_stages"])}
 }}
@@ -197,8 +196,8 @@ def _root_outputs(projection: dict) -> str:
         for component_id in _component_ids(projection)
     )
     return f"""
-output "topology_key" {{
-  value = local.topology_key
+output "topology_name" {{
+  value = local.topology_name
 }}
 
 output "pipeline_stages" {{
@@ -278,7 +277,7 @@ def _stack_readme(topology: dict, projection: dict) -> str:
     return f"""
 # RAG Terraform Sketch
 
-Topology: {topology["name"]} ({topology["key"]})
+Topology: {topology["name"]}
 
 Pipeline: {stages}
 
