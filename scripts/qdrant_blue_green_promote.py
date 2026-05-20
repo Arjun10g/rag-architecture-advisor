@@ -17,7 +17,6 @@ if __package__ in {None, ""}:
 
 from retrieval.vector_store import VectorStoreConfig, table_name_for_dimension
 from scripts.build_vector_index import DEFAULT_INDEX_DIMENSIONS, _build_order, _parse_dimensions
-from scripts.qdrant_cloud_bootstrap import _update_env
 
 
 DEFAULT_ALIAS_TABLE = "rag_advisor_chunks_live"
@@ -217,6 +216,27 @@ def _write_alias_manifest(
         encoding="utf-8",
     )
     return manifest
+
+
+def _update_env(path: Path, updates: dict[str, str]) -> None:
+    existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    seen = set()
+    output = []
+    for line in existing:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            output.append(line)
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key in updates:
+            output.append(f"{key}={updates[key]}")
+            seen.add(key)
+        else:
+            output.append(line)
+    for key, value in updates.items():
+        if key not in seen:
+            output.append(f"{key}={value}")
+    path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
