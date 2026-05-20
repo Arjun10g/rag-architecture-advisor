@@ -543,7 +543,9 @@ def _generation_prompt(
         "requirements, decisions, and evidence labels. Do not invent new sources, products, "
         "or requirements. Explain the reasoning behind each major decision, including "
         "the tradeoff accepted and the validation gate that should catch regressions. "
-        "Do not reveal raw source IDs, file names, or debug-looking chunk identifiers."
+        "Do not reveal raw source IDs, file names, or debug-looking chunk identifiers. "
+        "Preserve the required section headings exactly so the final answer reads like "
+        "a reasoned advisor trace, not a source dump."
     )
     prompt = f"""
 User brief:
@@ -567,11 +569,16 @@ Architecture decisions:
 Evidence snippets:
 {_source_summary(evidence_pack)}
 
-Write a final recommendation in four sections:
-1. Recommendation
-2. Why each decision was made
-3. Accepted tradeoffs
-4. What to validate next
+Write a final recommendation with exactly these Markdown section headings:
+### Recommendation
+### Agentic Reasoning Trace
+### Decision Rationale
+### Accepted Tradeoffs
+### Validation Plan
+
+In Agentic Reasoning Trace, walk through how the router interpreted the brief,
+which literature chunks affected the retrieval/security/cloud/evaluation choices,
+how the topology was selected, and why the validation plan follows from those chunks.
 
 Use evidence labels such as [E1] inline where they support a claim. Prefer
 reasoning chunks over source names; do not list file paths or raw chunk IDs.
@@ -675,6 +682,10 @@ def _answer_quality_issue(answer: str) -> str | None:
     if not EVIDENCE_REF_RE.search(answer):
         return "generated answer omitted evidence labels"
     lower = answer.lower()
+    if "agentic reasoning trace" not in lower:
+        return "generated answer omitted the agentic reasoning trace"
+    if "decision rationale" not in lower:
+        return "generated answer omitted the decision rationale"
     if "tradeoff" not in lower:
         return "generated answer omitted accepted tradeoffs"
     if "validat" not in lower:
