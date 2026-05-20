@@ -7,6 +7,14 @@ import sys
 import time
 from typing import Any
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional local convenience.
+    load_dotenv = None
+
+if load_dotenv:
+    load_dotenv()
+
 DEFAULT_BRIEF = (
     "Build an internal API docs assistant over fast-moving SDK docs with strict "
     "citations, mixed markdown and code, and high exact-match terminology needs."
@@ -109,6 +117,48 @@ def _latency_summary(values: list[float]) -> dict[str, float]:
         "p99": round(_percentile(values, 0.99), 2),
         "max": round(max(values) if values else 0.0, 2),
     }
+
+
+def _optional_env_float(key: str) -> float | None:
+    import os
+
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return None
+    return float(value)
+
+
+def _latency_slo(args: argparse.Namespace) -> tuple[float | None, float | None]:
+    if not args.slo_from_env:
+        return args.slo_p50_ms, args.slo_p99_ms
+    prefix = "DEEP_" if args.deep_thinking else ""
+    return (
+        _optional_env_float(f"{prefix}LATENCY_SLO_P50_MS"),
+        _optional_env_float(f"{prefix}LATENCY_SLO_P99_MS"),
+    )
+
+
+def _enforce_latency_slo(
+    summary: dict[str, float],
+    *,
+    p50_ms: float | None,
+    p99_ms: float | None,
+) -> dict[str, Any]:
+    status = {
+        "p50_ms": p50_ms,
+        "p99_ms": p99_ms,
+        "ok": True,
+    }
+    failures = []
+    if p50_ms is not None and summary["p50"] > p50_ms:
+        failures.append(f"p50 {summary['p50']}ms exceeded {p50_ms}ms")
+    if p99_ms is not None and summary["p99"] > p99_ms:
+        failures.append(f"p99 {summary['p99']}ms exceeded {p99_ms}ms")
+    if failures:
+        status["ok"] = False
+        status["failures"] = failures
+        raise AssertionError("latency SLO failed: " + "; ".join(failures))
+    return status
 
 
 def _validate_chunks(chunks: Any) -> list[dict[str, Any]]:
@@ -214,6 +264,13 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--show-preview", action="store_true")
     parser.add_argument("--deep-thinking", action="store_true")
+    parser.add_argument("--slo-p50-ms", type=float, default=None)
+    parser.add_argument("--slo-p99-ms", type=float, default=None)
+    parser.add_argument(
+        "--slo-from-env",
+        action="store_true",
+        help="Read standard or deep-thinking latency SLOs from the environment.",
+    )
     args = parser.parse_args()
     _require(args.runs >= 1, "--runs must be at least 1")
 
@@ -225,11 +282,15 @@ def main() -> None:
         latencies.append((time.perf_counter() - started) * 1000)
         _validate_public_payload(payload)
     assert payload is not None
+    latency = _latency_summary(latencies)
+    slo_p50, slo_p99 = _latency_slo(args)
+    slo_status = _enforce_latency_slo(latency, p50_ms=slo_p50, p99_ms=slo_p99)
     summary = {
         "url": args.url,
         "endpoint": args.endpoint,
         **_validate_public_payload(payload),
-        "client_latency_ms": _latency_summary(latencies),
+        "client_latency_ms": latency,
+        "latency_slo": slo_status,
     }
     if args.show_preview:
         summary["recommendation_preview"] = str(payload.get("recommendation") or "")[:800]

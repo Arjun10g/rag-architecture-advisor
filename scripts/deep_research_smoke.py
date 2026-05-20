@@ -9,6 +9,8 @@ if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 os.environ["LLM_PROVIDER"] = "disabled"
+os.environ["RATE_LIMIT_ENABLED"] = "false"
+os.environ["ADVISOR_LATENCY_PROFILE"] = "quality"
 
 from app import advise_api, advise_detailed
 from graph.build import build_graph

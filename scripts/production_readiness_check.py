@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any
 
 if __package__ in {None, ""}:
@@ -15,7 +16,7 @@ try:
 except ImportError:  # pragma: no cover - optional local convenience.
     load_dotenv = None
 
-from app import advise_api
+from app import _reset_rate_limiter_for_tests, advise_api
 from llm.provider import DEFAULT_HF_INFERENCE_MODEL
 from scripts.api_output_probe import (
     DEFAULT_BRIEF,
@@ -51,6 +52,51 @@ def _nonempty_env(key: str) -> bool:
     return bool(os.getenv(key, "").strip())
 
 
+def _env_bool(key: str) -> bool:
+    return os.getenv(key, "").lower().strip() in {"1", "true", "yes", "on"}
+
+
+def _env_float(key: str) -> float | None:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return None
+    return float(value)
+
+
+def _latency_slo_ok(prefix: str = "") -> tuple[bool, str]:
+    p50_key = f"{prefix}LATENCY_SLO_P50_MS"
+    p99_key = f"{prefix}LATENCY_SLO_P99_MS"
+    p50 = _env_float(p50_key)
+    p99 = _env_float(p99_key)
+    if p50 is None or p99 is None:
+        return False, f"missing {p50_key}/{p99_key}"
+    if p50 <= 0 or p99 <= 0:
+        return False, "SLO values must be positive milliseconds"
+    if p50 > p99:
+        return False, f"{p50_key} cannot exceed {p99_key}"
+    return True, f"p50<={p50:g}ms p99<={p99:g}ms"
+
+
+def _audit_log_path_ok() -> tuple[bool, str]:
+    raw = os.getenv("ADVISOR_AUDIT_LOG_PATH", "").strip()
+    if not raw:
+        return False, "missing"
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        return False, "must be an absolute path on persistent storage"
+
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    try:
+        resolved = path.resolve(strict=False)
+    except OSError:
+        resolved = path
+    if resolved == temp_root or temp_root in resolved.parents:
+        return False, "points at temporary storage"
+    if ".cache" in resolved.parts or "eval" in resolved.parts:
+        return False, "looks like cache/eval output, not durable audit storage"
+    return True, "set"
+
+
 def _vector_manifest_ok(path: Path) -> tuple[bool, str]:
     if not path.exists():
         return False, f"missing {path}"
@@ -64,12 +110,18 @@ def _vector_manifest_ok(path: Path) -> tuple[bool, str]:
     required = {1024, 512}
     if not required.issubset(dimensions | indexed_dimensions):
         return False, "manifest must include 1024 and 512 dimensional indexes"
+    for item in indexes:
+        if int(item.get("dimension") or 0) in required and int(item.get("chunks") or 0) <= 0:
+            return False, "1024 and 512 indexes must contain chunks"
     return True, f"dimensions={sorted(dimensions | indexed_dimensions)}"
 
 
 def _validate_direct_public_api() -> tuple[bool, str]:
     previous = os.environ.get("LLM_PROVIDER")
+    previous_rate_limit = os.environ.get("RATE_LIMIT_ENABLED")
     os.environ["LLM_PROVIDER"] = "disabled"
+    os.environ["RATE_LIMIT_ENABLED"] = "false"
+    _reset_rate_limiter_for_tests()
     try:
         payload = advise_api(DEFAULT_BRIEF)
         summary = _validate_public_payload(payload)
@@ -81,6 +133,11 @@ def _validate_direct_public_api() -> tuple[bool, str]:
             os.environ.pop("LLM_PROVIDER", None)
         else:
             os.environ["LLM_PROVIDER"] = previous
+        if previous_rate_limit is None:
+            os.environ.pop("RATE_LIMIT_ENABLED", None)
+        else:
+            os.environ["RATE_LIMIT_ENABLED"] = previous_rate_limit
+        _reset_rate_limiter_for_tests()
     return (
         True,
         (
@@ -142,23 +199,52 @@ def main() -> None:
             "set" if _secret_present("HF_TOKEN", "HF_ACCESS_TOKEN") else "missing",
             checks,
         )
+        ok, detail = _audit_log_path_ok()
+        _check("audit_log_path", ok, detail, checks)
+        ok, detail = _latency_slo_ok()
+        _check("latency_slo_standard", ok, detail, checks)
+        ok, detail = _latency_slo_ok("DEEP_")
+        _check("latency_slo_deep_thinking", ok, detail, checks)
+
+        vector_backend = os.getenv("VECTOR_STORE_BACKEND", "memory").strip().lower()
         _check(
-            "audit_log_path",
-            _nonempty_env("ADVISOR_AUDIT_LOG_PATH"),
-            "set" if _nonempty_env("ADVISOR_AUDIT_LOG_PATH") else "missing",
+            "vector_store_backend",
+            vector_backend in {"lancedb", "lance"},
+            f"VECTOR_STORE_BACKEND={vector_backend}",
+            checks,
+        )
+        production_modes = {"dense", "hybrid", "dense_colbert", "hybrid_colbert"}
+        _check(
+            "production_retrieval_mode",
+            retrieval_mode in production_modes,
+            f"RETRIEVAL_MODE={retrieval_mode}",
+            checks,
+        )
+        _check(
+            "rate_limit_or_gateway",
+            _env_bool("RATE_LIMIT_ENABLED") or _env_bool("EXTERNAL_RATE_LIMITING"),
+            (
+                "set"
+                if _env_bool("RATE_LIMIT_ENABLED") or _env_bool("EXTERNAL_RATE_LIMITING")
+                else "enable RATE_LIMIT_ENABLED or set EXTERNAL_RATE_LIMITING=true"
+            ),
             checks,
         )
         args.require_auth = True
-        if retrieval_mode != "lexical":
-            args.require_vector_index = True
+        args.require_vector_index = True
 
     if args.require_auth:
         username_set = _nonempty_env("GRADIO_AUTH_USERNAME")
         password_set = _nonempty_env("GRADIO_AUTH_PASSWORD")
+        gateway_set = _env_bool("EXTERNAL_AUTH_GATEWAY")
         _check(
-            "gradio_auth",
-            username_set and password_set,
-            "set" if username_set and password_set else "missing username/password pair",
+            "auth_or_gateway",
+            (username_set and password_set) or gateway_set,
+            (
+                "set"
+                if (username_set and password_set) or gateway_set
+                else "missing username/password pair or EXTERNAL_AUTH_GATEWAY=true"
+            ),
             checks,
         )
 

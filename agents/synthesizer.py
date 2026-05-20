@@ -780,6 +780,15 @@ def _generate_answer(
     architecture_decisions: list[dict],
     evidence_pack: dict,
 ) -> tuple[str, dict]:
+    latency_profile = os.getenv("ADVISOR_LATENCY_PROFILE", "quality").lower().strip()
+    if latency_profile in {"fast", "deterministic", "no-llm"}:
+        return _fallback_answer(state, topology, architecture_decisions), {
+            "status": "fast_profile",
+            "provider": "disabled",
+            "model": None,
+            "reason": f"ADVISOR_LATENCY_PROFILE={latency_profile} skips external LLM generation.",
+        }
+
     provider = None
     try:
         provider = get_provider()

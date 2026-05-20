@@ -68,9 +68,11 @@ python3 scripts/terraform_export_smoke.py
 python3 scripts/vector_store_smoke.py
 python3 scripts/vector_index_manifest_smoke.py
 python3 scripts/llm_provider_smoke.py
+python3 scripts/rate_limit_smoke.py
 python3 scripts/app_formatting_smoke.py
 python3 scripts/audit_log_smoke.py
 python3 scripts/production_readiness_check.py --profile demo
+python3 scripts/production_config_smoke.py
 python3 eval/harness.py --gate
 python3 eval/harness.py --gold eval/gold/v0_4_answer_quality.json --gate
 python3 eval/harness.py --gold eval/gold/v0_5_panel_quality.json --gate
@@ -126,6 +128,7 @@ graph state:
 ```bash
 python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --runs 3
 python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --deep-thinking
+python3 scripts/api_output_probe.py --url http://127.0.0.1:7860 --runs 5 --slo-from-env
 ```
 
 The detailed UI/debug response includes an `audit_record` in raw JSON. Set
@@ -139,8 +142,8 @@ are configured. Before treating an environment as production, run:
 
 ```bash
 python3 scripts/production_readiness_check.py --profile production
-python3 scripts/api_output_probe.py --url https://<space-or-host>/ --runs 5
-python3 scripts/api_output_probe.py --url https://<space-or-host>/ --deep-thinking
+python3 scripts/api_output_probe.py --url https://<space-or-host>/ --runs 5 --slo-from-env
+python3 scripts/api_output_probe.py --url https://<space-or-host>/ --deep-thinking --slo-from-env
 python3 scripts/hf_generation_probe.py
 ```
 
@@ -150,11 +153,22 @@ Production settings to verify:
   secrets/variables. The probes never print token values.
 - Set `GRADIO_AUTH_USERNAME` and `GRADIO_AUTH_PASSWORD`, or put the app behind an
   authenticated gateway with rate limits.
+- Set `RATE_LIMIT_ENABLED=true` with `RATE_LIMIT_MAX_REQUESTS` and
+  `RATE_LIMIT_WINDOW_SECONDS`, or set `EXTERNAL_RATE_LIMITING=true` only when an
+  upstream gateway enforces the limit.
 - Keep `SHOW_RAW_TRACE=false` so debug JSON is hidden in the UI. The public
   `/advise` endpoint never returns the raw graph state.
-- Set `ADVISOR_AUDIT_LOG_PATH` to a persistent log sink or mounted volume.
+- Set `ADVISOR_AUDIT_LOG_PATH` to a persistent log sink or mounted volume, for
+  example `/data/advisor-audit.jsonl` on a persistent Space.
 - For dense/hybrid production retrieval, build and mount the LanceDB index with
-  both 1024 and 512 dimensional tables, then set `VECTOR_STORE_BACKEND=lancedb`.
+  both 1024 and 512 dimensional tables, then set `RETRIEVAL_MODE=hybrid`,
+  `VECTOR_STORE_BACKEND=lancedb`, and `EMBEDDING_DIM=1024` or `512`.
+- Keep `LATENCY_SLO_P50_MS=10000` and `LATENCY_SLO_P99_MS=15000` as the standard
+  hosted SLO unless product requirements say otherwise. Deep-thinking mode uses
+  `DEEP_LATENCY_SLO_P50_MS=18000` and `DEEP_LATENCY_SLO_P99_MS=30000`.
+- If hosted Llama latency misses the SLO, set `ADVISOR_LATENCY_PROFILE=fast` to
+  use the deterministic grounded narrative while preserving retrieval,
+  citations, deployment projection, and audit output.
 - Keep the deep-thinking smoke green before launch. It checks that the parallel
   research agents return literature, framework, GitHub, Medium, and Hugging Face
   references without exposing internal source identifiers.

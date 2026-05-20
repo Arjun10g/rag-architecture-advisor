@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections import deque
 import json
 import os
+import threading
 import time
 from typing import Any
 
@@ -33,6 +35,8 @@ EXAMPLE_BRIEFS = [
 
 DetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
 ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, str, dict[str, Any]]
+_RATE_LIMIT_EVENTS: dict[str, deque[float]] = {}
+_RATE_LIMIT_LOCK = threading.Lock()
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -48,6 +52,39 @@ def _auth_credentials() -> tuple[str, str] | None:
     if bool(username) != bool(password):
         raise RuntimeError("Set both GRADIO_AUTH_USERNAME and GRADIO_AUTH_PASSWORD, or neither.")
     return (username, password) if username and password else None
+
+
+def _env_int(key: str, default: int) -> int:
+    value = os.getenv(key)
+    if value is None or not value.strip():
+        return default
+    return int(value)
+
+
+def _enforce_rate_limit(bucket: str) -> None:
+    if not _env_bool("RATE_LIMIT_ENABLED", False):
+        return
+
+    max_requests = max(1, _env_int("RATE_LIMIT_MAX_REQUESTS", 30))
+    window_seconds = max(1, _env_int("RATE_LIMIT_WINDOW_SECONDS", 60))
+    now = time.monotonic()
+    cutoff = now - window_seconds
+    with _RATE_LIMIT_LOCK:
+        events = _RATE_LIMIT_EVENTS.setdefault(bucket, deque())
+        while events and events[0] < cutoff:
+            events.popleft()
+        if len(events) >= max_requests:
+            retry_after = max(1, int(window_seconds - (now - events[0])))
+            raise RuntimeError(
+                "Rate limit exceeded. "
+                f"Try again in about {retry_after} seconds or use an authenticated deployment."
+            )
+        events.append(now)
+
+
+def _reset_rate_limiter_for_tests() -> None:
+    with _RATE_LIMIT_LOCK:
+        _RATE_LIMIT_EVENTS.clear()
 
 
 def _evidence_refs_text(refs: list[str]) -> str:
@@ -544,6 +581,7 @@ def clear_detail_response() -> ClearDetailResponse:
 
 
 def advise(user_brief: str) -> tuple[str, dict[str, Any]]:
+    _enforce_rate_limit("legacy")
     if not user_brief.strip():
         return "Enter a brief to generate an initial advisor trace.", {}
 
@@ -558,6 +596,7 @@ def advise_detailed(
     conflict_resolution: str | None = None,
     deep_thinking: bool = False,
 ) -> DetailResponse:
+    _enforce_rate_limit("advisor")
     if not user_brief.strip():
         return _empty_detail_response("Enter a brief to generate an initial advisor trace.")
 

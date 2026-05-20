@@ -41,10 +41,14 @@ jobs:
         run: python scripts/vector_index_manifest_smoke.py
       - name: LLM provider smoke test
         run: python scripts/llm_provider_smoke.py
+      - name: Rate limit smoke test
+        run: python scripts/rate_limit_smoke.py
       - name: App formatting smoke test
         run: python scripts/app_formatting_smoke.py
       - name: Production readiness demo check
         run: python scripts/production_readiness_check.py --profile demo
+      - name: Production config smoke test
+        run: python scripts/production_config_smoke.py
       - name: Public API endpoint smoke test
         env:
           LLM_PROVIDER: disabled
