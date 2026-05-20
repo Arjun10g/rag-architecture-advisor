@@ -37,6 +37,7 @@ def _format_output(state: AdvisorState) -> str:
     terraform = output.get("terraform", "")
     architecture_decisions = output.get("architecture_decisions") or []
     sources = output.get("sources") or []
+    generated_answer = output.get("generated_answer")
 
     lines = [
         "## Recommendation",
@@ -46,6 +47,9 @@ def _format_output(state: AdvisorState) -> str:
     ]
     for entry in state.decision_log[:8]:
         lines.append(f"- {entry.attr}: {entry.value} ({entry.source})")
+
+    if generated_answer:
+        lines.extend(["", "## Generated Advisor Summary", str(generated_answer).strip()])
 
     lines.extend(["", "## Strengths"])
     for item in panel.get("strengths", []):
@@ -90,12 +94,19 @@ def _format_recommendation(state: AdvisorState) -> str:
     output = state.draft_output or {}
     topology = output.get("topology", {})
     panel = output.get("panel", {})
+    generated_answer = output.get("generated_answer")
     lines = [
         f"## {topology.get('name', 'Pending')}",
         topology.get("rationale", ""),
+    ]
+
+    if generated_answer:
+        lines.extend(["", str(generated_answer).strip()])
+
+    lines.extend([
         "",
         "### Requirement Vector",
-    ]
+    ])
     for entry in state.decision_log[:12]:
         confidence = f"{entry.confidence:.2f}"
         lines.append(f"- **{entry.attr}:** {entry.value} ({entry.source}, confidence {confidence})")

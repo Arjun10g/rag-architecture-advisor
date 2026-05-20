@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass, field
 import json
 import math
+import os
 from pathlib import Path
 import sys
 import time
@@ -338,7 +339,15 @@ def _score_topology(items: list[dict[str, Any]]) -> tuple[dict[str, float], list
 
 
 def _default_answer(scenario: str) -> AdvisorState:
-    return build_graph().invoke({"user_brief": scenario})
+    previous_provider = os.environ.get("LLM_PROVIDER")
+    os.environ["LLM_PROVIDER"] = "disabled"
+    try:
+        return build_graph().invoke({"user_brief": scenario})
+    finally:
+        if previous_provider is None:
+            os.environ.pop("LLM_PROVIDER", None)
+        else:
+            os.environ["LLM_PROVIDER"] = previous_provider
 
 
 def _decision_by_area(output: dict[str, Any]) -> dict[str, dict[str, Any]]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from graph.state import AdvisorState
+from llm.provider import LLMProviderUnavailable, get_provider
 from synth.panel import build_panel
 from synth.projection import project_deployment
 from synth.terraform_emit import emit_terraform
@@ -121,16 +122,141 @@ def _architecture_decisions(topology: dict, projection: dict, evidence_pack: dic
     ]
 
 
+def _decision_summary(decisions: list[dict]) -> str:
+    lines = []
+    for decision in decisions:
+        area = str(decision.get("area") or "decision")
+        choice = str(decision.get("choice") or "Pending")
+        sources = ", ".join(decision.get("source_ids") or [])
+        line = f"- {area}: {choice}"
+        if sources:
+            line += f" [sources: {sources}]"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _requirement_summary(state: AdvisorState) -> str:
+    lines = []
+    for entry in state.decision_log[:12]:
+        lines.append(f"- {entry.attr}: {entry.value} ({entry.source}, confidence {entry.confidence:.2f})")
+    if state.pending_elicitation:
+        lines.append("- pending elicitation: " + ", ".join(state.pending_elicitation))
+    return "\n".join(lines)
+
+
+def _source_summary(evidence_pack: dict, limit: int = 10) -> str:
+    lines = []
+    for source in evidence_pack["sources"][:limit]:
+        source_id = source.get("source_id") or "unknown"
+        title = source.get("title") or "Untitled"
+        section = source.get("section") or "Unsectioned"
+        snippet = source.get("snippet") or ""
+        lines.append(f"- {source_id}: {title} / {section}. {snippet}")
+    return "\n".join(lines)
+
+
+def _generation_prompt(
+    state: AdvisorState,
+    topology: dict,
+    architecture_decisions: list[dict],
+    evidence_pack: dict,
+) -> tuple[str, str]:
+    system = (
+        "You are a precise RAG architecture advisor. Write only from the supplied "
+        "requirements, decisions, and source IDs. Do not invent new sources, products, "
+        "or requirements. Keep the answer concise and citation-aware."
+    )
+    prompt = f"""
+User brief:
+{state.user_brief}
+
+Selected topology:
+{topology.get("name")} ({topology.get("key")})
+{topology.get("rationale")}
+
+Resolved requirement vector:
+{_requirement_summary(state)}
+
+Architecture decisions:
+{_decision_summary(architecture_decisions)}
+
+Evidence snippets:
+{_source_summary(evidence_pack)}
+
+Write a final recommendation in three short sections:
+1. Recommendation
+2. Key tradeoffs
+3. What to validate next
+
+Mention source IDs inline where they support a claim.
+""".strip()
+    return system, prompt
+
+
+def _fallback_answer(topology: dict, architecture_decisions: list[dict]) -> str:
+    lines = [
+        f"### Recommendation",
+        f"Use {topology.get('name', 'the selected topology')} for this brief.",
+        "",
+        "### Key tradeoffs",
+    ]
+    for decision in architecture_decisions[:4]:
+        source_ids = " ".join(f"`{source_id}`" for source_id in decision.get("source_ids") or [])
+        lines.append(f"- {decision.get('area', 'decision')}: {decision.get('choice', 'Pending')} {source_ids}")
+    lines.extend(
+        [
+            "",
+            "### What to validate next",
+            "- Run the gold-set retrieval and answer gates after changing retrieval mode, embedding dimension, or reranker settings.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _generate_answer(
+    state: AdvisorState,
+    topology: dict,
+    architecture_decisions: list[dict],
+    evidence_pack: dict,
+) -> tuple[str, dict]:
+    provider = None
+    try:
+        provider = get_provider()
+        system, prompt = _generation_prompt(state, topology, architecture_decisions, evidence_pack)
+        answer = provider.generate(prompt, system=system)
+    except LLMProviderUnavailable as exc:
+        return _fallback_answer(topology, architecture_decisions), {
+            "status": "fallback",
+            "provider": getattr(provider, "name", "unknown"),
+            "model": getattr(provider, "model", None),
+            "reason": str(exc),
+        }
+    return answer, {
+        "status": "ok",
+        "provider": getattr(provider, "name", "unknown"),
+        "model": getattr(provider, "model", None),
+    }
+
+
 def synthesize(state: AdvisorState) -> dict:
     topology = select_topology(state.requirement_vector)
     projection = project_deployment(topology)
     evidence_pack = _evidence_pack(state)
+    architecture_decisions = _architecture_decisions(topology, projection, evidence_pack)
+    generated_answer, generation = _generate_answer(
+        state,
+        topology,
+        architecture_decisions,
+        evidence_pack,
+    )
     return {
         "topology": topology,
         "projection": projection,
         "terraform": emit_terraform(topology, projection),
         "panel": build_panel(state, topology),
         "evidence_pack": evidence_pack,
-        "architecture_decisions": _architecture_decisions(topology, projection, evidence_pack),
+        "architecture_decisions": architecture_decisions,
         "sources": evidence_pack["sources"],
+        "generated_answer": generated_answer,
+        "generation": generation,
     }

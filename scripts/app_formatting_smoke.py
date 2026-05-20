@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sys
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+os.environ["LLM_PROVIDER"] = "disabled"
 
 from app import advise, advise_detailed, clear_detail_response
 
@@ -30,6 +33,8 @@ def main() -> None:
         raise AssertionError("trace tab is missing heading")
     if not raw.get("draft_output", {}).get("architecture_decisions"):
         raise AssertionError("raw trace is missing architecture decisions")
+    if raw.get("draft_output", {}).get("generation", {}).get("status") != "fallback":
+        raise AssertionError("deterministic smoke should use LLM fallback path")
 
     cleared = clear_detail_response()
     if cleared != ("", "", [], "", "", "", {}):

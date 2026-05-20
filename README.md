@@ -50,15 +50,34 @@ Track B is what the app produces: selected RAG topology, linked pipeline and dep
 ```bash
 python3 -m compileall app.py graph agents retrieval ingestion synth llm eval scripts
 python3 scripts/vector_store_smoke.py
+python3 scripts/llm_provider_smoke.py
 python3 scripts/app_formatting_smoke.py
 python3 eval/harness.py --gate
 python3 eval/harness.py --gold eval/gold/v0_4_answer_quality.json --gate
-python3 -c "from graph.build import build_graph; s = build_graph().invoke({'user_brief': 'internal API docs assistant'}); print(s.domain_prior)"
+LLM_PROVIDER=disabled python3 -c "from graph.build import build_graph; s = build_graph().invoke({'user_brief': 'internal API docs assistant'}); print(s.domain_prior)"
 ```
 
 The answer gate checks that final recommendations include structured architecture
 decisions, source IDs on each major claim, required source families, and citation
 coverage metrics.
+
+## LLM Generation
+
+Structured topology, architecture decisions, citations, and Terraform sketches are
+deterministic. The optional LLM layer writes the narrative advisor summary from
+those already-grounded fields. By default it uses Hugging Face Inference
+Providers:
+
+```bash
+LLM_PROVIDER=hf
+HF_INFERENCE_PROVIDER=auto
+HF_INFERENCE_MODEL=HuggingFaceH4/zephyr-7b-beta
+```
+
+Set `LLM_PROVIDER=disabled` for no-network deterministic output. If
+`huggingface_hub`, the model endpoint, or provider access is unavailable, the app
+falls back to a deterministic generated summary and records the reason in
+`draft_output.generation`.
 
 ## Retrieval Modes
 
