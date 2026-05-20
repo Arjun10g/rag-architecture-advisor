@@ -60,8 +60,12 @@ class AdvisorState:
     )
     decision_log: list[DecisionLogEntry] = field(default_factory=list)
     domain_prior: str | None = None
+    domain_scores: dict[str, int] = field(default_factory=dict)
     pending_elicitation: list[str] = field(default_factory=list)
+    elicitation_answers: dict[str, str] = field(default_factory=dict)
     conflict: ConflictSet | None = None
+    conflict_resolution: str | None = None
+    hard_constraints: list[str] = field(default_factory=list)
     agent_findings: dict[str, Finding] = field(default_factory=dict)
     draft_output: dict[str, Any] | None = None
     critique: list[str] = field(default_factory=list)
@@ -71,7 +75,12 @@ class AdvisorState:
     def from_input(cls, value: "AdvisorState | dict[str, Any]") -> "AdvisorState":
         if isinstance(value, AdvisorState):
             return value
-        return cls(user_brief=str(value.get("user_brief", "")))
+        return cls(
+            user_brief=str(value.get("user_brief", "")),
+            domain_prior=value.get("domain_prior"),
+            elicitation_answers=dict(value.get("elicitation_answers") or {}),
+            conflict_resolution=value.get("conflict_resolution"),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

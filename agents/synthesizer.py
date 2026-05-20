@@ -155,6 +155,19 @@ def _source_summary(evidence_pack: dict, limit: int = 10) -> str:
     return "\n".join(lines)
 
 
+def _hard_constraint_summary(state: AdvisorState) -> str:
+    if not state.hard_constraints:
+        return "- none"
+    return "\n".join(f"- {constraint}" for constraint in state.hard_constraints)
+
+
+def _conflict_summary(state: AdvisorState) -> str:
+    if not state.conflict:
+        return "- none"
+    options = "\n".join(f"  - {option}" for option in state.conflict.options)
+    return f"- {state.conflict.rationale}\n{options}"
+
+
 def _generation_prompt(
     state: AdvisorState,
     topology: dict,
@@ -176,6 +189,12 @@ Selected topology:
 
 Resolved requirement vector:
 {_requirement_summary(state)}
+
+Hard constraints:
+{_hard_constraint_summary(state)}
+
+Router conflicts:
+{_conflict_summary(state)}
 
 Architecture decisions:
 {_decision_summary(architecture_decisions)}

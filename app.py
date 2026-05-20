@@ -170,6 +170,17 @@ def _format_trace(state: AdvisorState) -> str:
         lines.append(f"- **{entry.attr}:** {entry.value} ({entry.source}, confidence {confidence})")
         lines.append(f"  {entry.reason}")
 
+    if state.hard_constraints:
+        lines.extend(["", "## Hard Constraints"])
+        for constraint in state.hard_constraints:
+            lines.append(f"- {constraint}")
+
+    if state.conflict:
+        lines.extend(["", "## Conflict"])
+        lines.append(state.conflict.rationale)
+        for option in state.conflict.options:
+            lines.append(f"- {option}")
+
     if state.critique:
         lines.extend(["", "## Critique"])
         for item in state.critique:
