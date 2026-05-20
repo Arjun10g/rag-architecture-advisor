@@ -29,6 +29,9 @@ EXAMPLE_BRIEFS = [
     "We need a RAG system, but the domain, document type, sensitivity, update cadence, and latency requirements are not known yet.",
 ]
 
+DetailResponse = tuple[str, str, list[list[Any]], str, str, str, dict[str, Any]]
+ClearDetailResponse = tuple[str, str, list[list[Any]], str, str, str, str, dict[str, Any]]
+
 
 def _format_output(state: AdvisorState) -> str:
     output = state.draft_output or {}
@@ -163,6 +166,31 @@ def _source_rows(state: AdvisorState) -> list[list[Any]]:
     return rows
 
 
+def _format_deployment(state: AdvisorState) -> str:
+    projection = (state.draft_output or {}).get("projection") or {}
+    pipeline_nodes = projection.get("pipeline_nodes") or []
+    deployment_components = projection.get("deployment_components") or []
+    projection_edges = projection.get("projection_edges") or []
+
+    lines = ["## Pipeline"]
+    for node in pipeline_nodes:
+        lines.append(f"{node.get('order')}. **{node.get('label')}** (`{node.get('id')}`)")
+
+    lines.extend(["", "## Deployment Projection"])
+    for component in deployment_components:
+        serves = ", ".join(f"`{stage}`" for stage in component.get("serves") or [])
+        controls = ", ".join(f"`{control}`" for control in component.get("controls") or [])
+        lines.append(f"- **{component.get('label')}** ({component.get('pillar')})")
+        lines.append(f"  Serves: {serves or 'none'}")
+        lines.append(f"  Controls: {controls or 'none'}")
+
+    if projection_edges:
+        lines.extend(["", "## Projection Edges"])
+        for edge in projection_edges[:24]:
+            lines.append(f"- `{edge.get('from')}` -> `{edge.get('to')}`")
+    return "\n".join(lines)
+
+
 def _format_trace(state: AdvisorState) -> str:
     lines = ["## Decision Trace"]
     for entry in state.decision_log:
@@ -197,12 +225,14 @@ def _terraform(state: AdvisorState) -> str:
     return str((state.draft_output or {}).get("terraform") or "")
 
 
-def _empty_detail_response(message: str) -> tuple[str, str, list[list[Any]], str, str, dict[str, Any]]:
-    return message, "", [], "", "", {}
+def _empty_detail_response(
+    message: str,
+) -> DetailResponse:
+    return message, "", [], "", "", "", {}
 
 
-def clear_detail_response() -> tuple[str, str, list[list[Any]], str, str, str, dict[str, Any]]:
-    return "", "", [], "", "", "", {}
+def clear_detail_response() -> ClearDetailResponse:
+    return "", "", [], "", "", "", "", {}
 
 
 def advise(user_brief: str) -> tuple[str, dict[str, Any]]:
@@ -214,7 +244,9 @@ def advise(user_brief: str) -> tuple[str, dict[str, Any]]:
     return _format_output(state), state.to_dict()
 
 
-def advise_detailed(user_brief: str) -> tuple[str, str, list[list[Any]], str, str, dict[str, Any]]:
+def advise_detailed(
+    user_brief: str,
+) -> DetailResponse:
     if not user_brief.strip():
         return _empty_detail_response("Enter a brief to generate an initial advisor trace.")
 
@@ -224,6 +256,7 @@ def advise_detailed(user_brief: str) -> tuple[str, str, list[list[Any]], str, st
         _format_recommendation(state),
         _format_architecture_decisions(state),
         _source_rows(state),
+        _format_deployment(state),
         _terraform(state),
         _format_trace(state),
         state.to_dict(),
@@ -255,6 +288,8 @@ def build_demo():
                     interactive=False,
                     label="Sources",
                 )
+            with gr.Tab("Deployment"):
+                deployment = gr.Markdown(label="Deployment Projection")
             with gr.Tab("Terraform"):
                 terraform = gr.Textbox(label="Terraform Sketch", lines=18)
             with gr.Tab("Trace"):
@@ -262,7 +297,7 @@ def build_demo():
             with gr.Tab("Raw JSON"):
                 raw_trace = gr.JSON(label="Raw Trace")
 
-        outputs = [recommendation, decisions, sources, terraform, trace, raw_trace]
+        outputs = [recommendation, decisions, sources, deployment, terraform, trace, raw_trace]
         run.click(fn=advise_detailed, inputs=brief, outputs=outputs)
         clear.click(fn=clear_detail_response, inputs=None, outputs=[brief, *outputs])
     return demo

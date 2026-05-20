@@ -27,6 +27,8 @@ jobs:
         run: python scripts/specialist_fanout_smoke.py
       - name: Topology catalog smoke test
         run: python scripts/topology_catalog_smoke.py
+      - name: Terraform emit smoke test
+        run: python scripts/terraform_emit_smoke.py
       - name: Retrieval smoke test
         run: python scripts/retrieval_smoke.py
       - name: Vector store smoke test
