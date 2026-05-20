@@ -27,6 +27,7 @@ def _format_output(state: AdvisorState) -> str:
     topology = output.get("topology", {})
     panel = output.get("panel", {})
     terraform = output.get("terraform", "")
+    sources = output.get("sources") or []
 
     lines = [
         "## Recommendation",
@@ -47,6 +48,18 @@ def _format_output(state: AdvisorState) -> str:
 
     if terraform:
         lines.extend(["", "## Terraform Sketch", "```hcl", terraform.strip(), "```"])
+
+    if sources:
+        lines.extend(["", "## Sources"])
+        for index, source in enumerate(sources[:8], start=1):
+            title = source.get("title") or "Untitled source"
+            section = source.get("section") or "Unsectioned"
+            source_id = source.get("source_id") or "unknown"
+            used_by = ", ".join(source.get("used_by") or [])
+            label = section if section.startswith(title) else f"{title} - {section}"
+            lines.append(f"- [{index}] {label} (`{source_id}`)")
+            if used_by:
+                lines.append(f"  Used by: {used_by}")
 
     return "\n".join(lines)
 
@@ -88,4 +101,3 @@ if __name__ == "__main__":
             server_port=int(os.getenv("GRADIO_SERVER_PORT", "7860")),
             share=os.getenv("GRADIO_SHARE", "false").lower() == "true",
         )
-

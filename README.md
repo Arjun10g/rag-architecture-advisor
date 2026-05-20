@@ -48,6 +48,12 @@ and model access are available:
 python3 scripts/embedding_dim_ablation.py --gold eval/gold/v0_2_expanded.json --dimensions 1024,768,512,384,256
 ```
 
+Current recommendation from the local/GPU ablations:
+
+- Keep `RETRIEVAL_MODE=lexical` for CI, Spaces startup safety, and no-download local smoke tests.
+- Use `RETRIEVAL_MODE=hybrid` with `EMBEDDING_DIM=1024` as the best quality profile when the embedding model is cached.
+- Use `RETRIEVAL_MODE=dense` with `EMBEDDING_DIM=512` for the fastest dense-only profile with minimal quality loss.
+
 Compare lexical, dense, hybrid, and ColBERT-reranked strategies across both gold
 sets with:
 

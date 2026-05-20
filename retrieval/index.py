@@ -21,6 +21,28 @@ class QueryFeatures:
     phrases: list[str]
 
 
+@dataclass
+class IndexedChunk:
+    chunk: Chunk
+    terms: list[str]
+    term_counts: dict[str, int]
+    term_set: set[str]
+    doc_len: int
+    leaf_section_terms: set[str]
+    section_terms: set[str]
+    title_terms: set[str]
+    tags_terms: set[str]
+    domain_terms: set[str]
+    source_path_terms: set[str]
+    compact_metadata_terms: set[str]
+    section_ordered_terms: list[str]
+    leaf_section_phrase_text: str
+    section_phrase_text: str
+    title_phrase_text: str
+    full_text_phrase_text: str
+    element_type: str
+
+
 STOPWORDS = {
     "a",
     "an",
@@ -94,23 +116,21 @@ def _phrases(terms: list[str]) -> list[str]:
     return phrases
 
 
-def _field_token_boost(terms: list[str], field: str, weight: float) -> float:
-    field_terms = set(_tokens(field))
+def _field_token_boost_from_set(terms: list[str], field_terms: set[str], weight: float) -> float:
     return weight * sum(1 for term in terms if term in field_terms)
 
 
-def _field_coverage_boost(terms: list[str], field: str, weight: float) -> float:
+def _field_coverage_boost_from_set(terms: list[str], field_terms: set[str], weight: float) -> float:
     if not terms:
         return 0.0
-    field_terms = set(_tokens(field))
-    coverage = sum(1 for term in set(terms) if term in field_terms) / len(set(terms))
+    unique_terms = set(terms)
+    coverage = sum(1 for term in unique_terms if term in field_terms) / len(unique_terms)
     return weight * coverage * coverage
 
 
-def _phrase_boost(phrases: list[str], field: str, weight: float) -> float:
+def _phrase_boost_normalized(phrases: list[str], normalized: str, weight: float) -> float:
     if not phrases:
         return 0.0
-    normalized = _normalize_phrase_field(field)
     score = 0.0
     for phrase in phrases:
         if phrase in normalized:
@@ -118,8 +138,7 @@ def _phrase_boost(phrases: list[str], field: str, weight: float) -> float:
     return score
 
 
-def _ordered_query_boost(terms: list[str], field: str, weight: float) -> float:
-    field_terms = _tokens(field)
+def _ordered_query_boost_from_terms(terms: list[str], field_terms: list[str], weight: float) -> float:
     if len(terms) < 2 or not field_terms:
         return 0.0
     cursor = 0
@@ -141,9 +160,12 @@ def _looks_like_source_query(query: QueryFeatures) -> bool:
     return any(term in source_terms for term in query.terms)
 
 
-def _heading_intent_boost(query: QueryFeatures, leaf_section: str, section: str) -> float:
-    section_text = _normalize_phrase_field(section)
-    leaf_text = _normalize_phrase_field(leaf_section)
+def _heading_intent_boost_indexed(
+    query: QueryFeatures,
+    leaf_text: str,
+    section_text: str,
+    section_terms: set[str],
+) -> float:
     terms = set(query.terms)
     boost = 0.0
 
@@ -154,7 +176,7 @@ def _heading_intent_boost(query: QueryFeatures, leaf_section: str, section: str)
     if "fanout" in terms and "fanout" in leaf_text:
         boost += 55.0
     decision_terms = {"choose", "decision", "select", "selection", "strategy"}
-    if terms & decision_terms and {"decision", "rule"} <= set(_tokens(section_text)):
+    if terms & decision_terms and {"decision", "rule"} <= section_terms:
         boost += 55.0
     if terms & {"choose", "strategy"} and (
         "selection framework" in section_text or "decision matrix" in section_text
@@ -170,6 +192,17 @@ def _heading_intent_boost(query: QueryFeatures, leaf_section: str, section: str)
 
 def _normalize_phrase_field(value: str) -> str:
     return " ".join(_tokens(value))
+
+
+def _term_set(value: str) -> set[str]:
+    return set(_tokens(value))
+
+
+def _term_counts(terms: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for term in terms:
+        counts[term] = counts.get(term, 0) + 1
+    return counts
 
 
 def _normalize_token(token: str) -> str:
@@ -188,8 +221,9 @@ def _tokens(text: str) -> list[str]:
 class HybridRetriever:
     def __init__(self, chunks: list[Chunk] | None = None):
         self.chunks = chunks or []
-        self._doc_freq = self._build_doc_freq(self.chunks)
-        self._avg_doc_len = self._average_doc_length(self.chunks)
+        self._indexed_chunks = [self._index_chunk(chunk) for chunk in self.chunks]
+        self._doc_freq = self._build_doc_freq(self._indexed_chunks)
+        self._avg_doc_len = self._average_doc_length(self._indexed_chunks)
 
     def search(
         self,
@@ -201,37 +235,66 @@ class HybridRetriever:
         query_features = _query_features(query)
         filters = filters or {}
         scored: list[SearchResult] = []
-        for chunk in self.chunks:
+        for indexed in self._indexed_chunks:
+            chunk = indexed.chunk
             if namespace and chunk.metadata.get("namespace") != namespace:
                 continue
             if any(str(chunk.metadata.get(key)) != str(value) for key, value in filters.items()):
                 continue
 
-            score = self._score_chunk(query_features, chunk)
+            score = self._score_chunk(query_features, indexed)
             if score > 0:
                 scored.append(SearchResult(chunk=chunk, score=score))
         return sorted(scored, key=lambda item: item.score, reverse=True)[:top_k]
 
-    def _score_chunk(self, query: QueryFeatures, chunk: Chunk) -> float:
-        text = chunk.text_for_embedding.lower()
-        chunk_terms = _tokens(text)
-        if not query.terms or not chunk_terms:
+    def _score_chunk(self, query: QueryFeatures, indexed: IndexedChunk) -> float:
+        if not query.terms or not indexed.terms:
             return 0.0
 
-        term_counts: dict[str, int] = {}
-        for term in chunk_terms:
-            term_counts[term] = term_counts.get(term, 0) + 1
-
         score = 0.0
-        total_docs = max(len(self.chunks), 1)
-        doc_len = len(chunk_terms)
+        total_docs = max(len(self._indexed_chunks), 1)
         for term in query.terms:
-            tf = term_counts.get(term, 0)
+            tf = indexed.term_counts.get(term, 0)
             if not tf:
                 continue
             idf = math.log((1 + total_docs) / (1 + self._doc_freq.get(term, 0))) + 1.0
-            score += _bm25_weight(tf=tf, idf=idf, doc_len=doc_len, avg_doc_len=self._avg_doc_len)
+            score += _bm25_weight(
+                tf=tf,
+                idf=idf,
+                doc_len=indexed.doc_len,
+                avg_doc_len=self._avg_doc_len,
+            )
 
+        score += _field_token_boost_from_set(query.important_terms, indexed.leaf_section_terms, weight=4.0)
+        score += _field_token_boost_from_set(query.important_terms, indexed.section_terms, weight=2.8)
+        score += _field_token_boost_from_set(query.important_terms, indexed.title_terms, weight=1.6)
+        score += _field_token_boost_from_set(query.important_terms, indexed.tags_terms, weight=1.1)
+        score += _field_token_boost_from_set(query.important_terms, indexed.domain_terms, weight=0.9)
+        score += _field_token_boost_from_set(query.important_terms, indexed.source_path_terms, weight=0.4)
+        score += _field_coverage_boost_from_set(query.important_terms, indexed.leaf_section_terms, weight=9.0)
+        score += _field_coverage_boost_from_set(query.important_terms, indexed.section_terms, weight=7.0)
+        score += _field_coverage_boost_from_set(query.important_terms, indexed.compact_metadata_terms, weight=3.0)
+        score += _phrase_boost_normalized(query.phrases, indexed.leaf_section_phrase_text, weight=16.0)
+        score += _phrase_boost_normalized(query.phrases, indexed.section_phrase_text, weight=12.0)
+        score += _phrase_boost_normalized(query.phrases, indexed.title_phrase_text, weight=6.0)
+        score += _phrase_boost_normalized(query.phrases, indexed.full_text_phrase_text, weight=2.0)
+        score += _ordered_query_boost_from_terms(query.important_terms, indexed.section_ordered_terms, weight=6.0)
+        score += _heading_intent_boost_indexed(
+            query,
+            indexed.leaf_section_phrase_text,
+            indexed.section_phrase_text,
+            indexed.section_terms,
+        )
+
+        if indexed.element_type == "reference" and not _looks_like_source_query(query):
+            score *= 0.7
+
+        return score
+
+    @staticmethod
+    def _index_chunk(chunk: Chunk) -> IndexedChunk:
+        text = chunk.text_for_embedding.lower()
+        terms = _tokens(text)
         section_parts = [str(part) for part in chunk.metadata.get("section_path") or []]
         section = " ".join(section_parts).lower()
         leaf_section = section_parts[-1].lower() if section_parts else ""
@@ -242,37 +305,36 @@ class HybridRetriever:
         compact_metadata = " ".join([title, section, tags, domain, source_path.replace("_", " ")])
         full_text = f"{compact_metadata}\n{text}"
 
-        score += _field_token_boost(query.important_terms, leaf_section, weight=4.0)
-        score += _field_token_boost(query.important_terms, section, weight=2.8)
-        score += _field_token_boost(query.important_terms, title, weight=1.6)
-        score += _field_token_boost(query.important_terms, tags, weight=1.1)
-        score += _field_token_boost(query.important_terms, domain.replace("-", " "), weight=0.9)
-        score += _field_token_boost(query.important_terms, source_path.replace("_", " "), weight=0.4)
-        score += _field_coverage_boost(query.important_terms, leaf_section, weight=9.0)
-        score += _field_coverage_boost(query.important_terms, section, weight=7.0)
-        score += _field_coverage_boost(query.important_terms, compact_metadata, weight=3.0)
-        score += _phrase_boost(query.phrases, leaf_section, weight=16.0)
-        score += _phrase_boost(query.phrases, section, weight=12.0)
-        score += _phrase_boost(query.phrases, title, weight=6.0)
-        score += _phrase_boost(query.phrases, full_text, weight=2.0)
-        score += _ordered_query_boost(query.important_terms, section, weight=6.0)
-        score += _heading_intent_boost(query, leaf_section, section)
-
-        element_type = str(chunk.metadata.get("element_type") or "")
-        if element_type == "reference" and not _looks_like_source_query(query):
-            score *= 0.7
-
-        return score
+        return IndexedChunk(
+            chunk=chunk,
+            terms=terms,
+            term_counts=_term_counts(terms),
+            term_set=set(terms),
+            doc_len=len(terms),
+            leaf_section_terms=_term_set(leaf_section),
+            section_terms=_term_set(section),
+            title_terms=_term_set(title),
+            tags_terms=_term_set(tags),
+            domain_terms=_term_set(domain.replace("-", " ")),
+            source_path_terms=_term_set(source_path.replace("_", " ")),
+            compact_metadata_terms=_term_set(compact_metadata),
+            section_ordered_terms=_tokens(section),
+            leaf_section_phrase_text=_normalize_phrase_field(leaf_section),
+            section_phrase_text=_normalize_phrase_field(section),
+            title_phrase_text=_normalize_phrase_field(title),
+            full_text_phrase_text=_normalize_phrase_field(full_text),
+            element_type=str(chunk.metadata.get("element_type") or ""),
+        )
 
     @staticmethod
-    def _build_doc_freq(chunks: list[Chunk]) -> dict[str, int]:
+    def _build_doc_freq(indexed_chunks: list[IndexedChunk]) -> dict[str, int]:
         doc_freq: dict[str, int] = {}
-        for chunk in chunks:
-            for term in set(_tokens(chunk.text_for_embedding)):
+        for indexed in indexed_chunks:
+            for term in indexed.term_set:
                 doc_freq[term] = doc_freq.get(term, 0) + 1
         return doc_freq
 
     @staticmethod
-    def _average_doc_length(chunks: list[Chunk]) -> float:
-        lengths = [len(_tokens(chunk.text_for_embedding)) for chunk in chunks]
+    def _average_doc_length(indexed_chunks: list[IndexedChunk]) -> float:
+        lengths = [indexed.doc_len for indexed in indexed_chunks]
         return sum(lengths) / len(lengths) if lengths else 1.0

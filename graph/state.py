@@ -33,12 +33,23 @@ class ConflictSet:
 
 
 @dataclass
+class SourceRef:
+    source_id: str
+    title: str
+    section: str
+    source_path: str
+    score: float
+    snippet: str = ""
+
+
+@dataclass
 class Finding:
     agent: str
     recommendation: str
     decisions: list[str] = field(default_factory=list)
     open_questions: list[str] = field(default_factory=list)
     source_ids: list[str] = field(default_factory=list)
+    sources: list[SourceRef] = field(default_factory=list)
 
 
 @dataclass
@@ -64,4 +75,3 @@ class AdvisorState:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-
