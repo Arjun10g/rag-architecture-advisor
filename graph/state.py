@@ -70,6 +70,7 @@ class AdvisorState:
     draft_output: dict[str, Any] | None = None
     critique: list[str] = field(default_factory=list)
     loop_count: int = 0
+    graph_trace: list[str] = field(default_factory=list)
 
     @classmethod
     def from_input(cls, value: "AdvisorState | dict[str, Any]") -> "AdvisorState":

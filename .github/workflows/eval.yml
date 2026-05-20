@@ -21,6 +21,8 @@ jobs:
         run: python scripts/ingestion_smoke.py
       - name: Router state smoke test
         run: python scripts/router_state_smoke.py
+      - name: Graph flow smoke test
+        run: python scripts/graph_flow_smoke.py
       - name: Retrieval smoke test
         run: python scripts/retrieval_smoke.py
       - name: Vector store smoke test

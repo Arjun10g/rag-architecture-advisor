@@ -185,6 +185,11 @@ def _format_trace(state: AdvisorState) -> str:
         lines.extend(["", "## Critique"])
         for item in state.critique:
             lines.append(f"- {item}")
+
+    if state.graph_trace:
+        lines.extend(["", "## Graph Trace"])
+        for item in state.graph_trace:
+            lines.append(f"- {item}")
     return "\n".join(lines)
 
 
