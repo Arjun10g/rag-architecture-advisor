@@ -5,7 +5,7 @@ app_file: app.py
 pinned: false
 colorFrom: blue
 colorTo: green
-short_description: Agentic RAG architecture advisor with hybrid retrieval, Qdrant, citations, evals, and IaC guidance.
+short_description: Agentic RAG advisor for retrieval architecture.
 tags:
   - rag
   - agentic-rag
